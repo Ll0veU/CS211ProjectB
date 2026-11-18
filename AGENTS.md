@@ -5,6 +5,7 @@
 - `backend/`: Python collection, Binder analysis, evaluation, resource measurement, and HTTP API. `trace.pbtx` configures Perfetto; `web/` contains shared HTML, CSS, and JavaScript.
 - `android/app/src/main/`: Java controller, notification/overlay markers, and manifest. Gradle configuration and wrapper live in `android/`.
 - `tests/`: regression and mocked API tests. `artifacts/apk/app-debug.apk` is the tracked debug APK.
+- `frontend/`: React/TypeScript workbench, bilingual resources, and component tests. `backend/experiment_protocol.json` is the canonical protocol; plans store immutable snapshots.
 - `runs/`: generated traces and exports; ignored by Git. Consult `PLAN.md`, `NEXT_WEEK_PLAN.md`, and `VALIDATION.md` for requirements and acceptance status.
 
 ## Build, Test, and Development Commands
@@ -23,6 +24,7 @@ These commands create/activate the environment, install dependencies, and serve 
 - `.\android\gradlew.bat -p android :app:assembleDebug`: build `android/app/build/outputs/apk/debug/app-debug.apk`.
 - `python -m unittest discover -s tests -v`: run regression tests.
 - `node --check backend/web/app.js`: check JavaScript syntax; requires Node.
+- In `frontend`, run `npm ci`, `npm run build`, and `npm test`; the Python server serves the resulting `dist/` on port 8765.
 - `python -m backend.experiments`: evaluate runs into `runs/evaluation.json`.
 
 ## Coding Style & Naming Conventions
@@ -32,6 +34,8 @@ Use four-space indentation for Python and Java, and two spaces for JavaScript. F
 ## Testing Guidelines
 
 Use standard-library `unittest` and `unittest.mock`; name files `test_*.py` and methods `test_*`. Cover changed accounting, authentication, lifecycle, or resource logic. Mock ADB/capture operations and use temporary directories. No coverage threshold is configured. Record real-phone checks separately in `VALIDATION.md`; mocks cannot establish Binder capture, marker timing, or measured overhead.
+
+Use Vitest and Testing Library for draft persistence, translated workflows, and API failure behavior. Keep simulated plans outside real run directories. Explain non-obvious timing, attribution, and compatibility decisions with English comments.
 
 ## Commit & Pull Request Guidelines
 

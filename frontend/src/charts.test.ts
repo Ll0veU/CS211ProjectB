@@ -21,21 +21,20 @@ describe('communication chart evidence', () => {
       width: 1000,
       height: 680,
     });
-    const graphics = option.graphic as {
-      id: string;
-      style: { text?: string };
+    expect(option.graphic).toBeUndefined();
+    const series = option.series as {
+      label: { formatter: (item: { name: string }) => string };
     }[];
     expect(
-      graphics
-        .filter((item) => item.id.startsWith('chord-label-'))
-        .map((item) => item.style.text)
-        .sort()
-    ).toEqual(['UPID 788', 'UPID 949']);
+      edges
+        .flatMap((edge) => [edge.sender, edge.receiver])
+        .map((name) => series[0].label.formatter({ name }))
+    ).toEqual(['UPID 949', 'UPID 788']);
     expect(option).toMatchObject({
       series: [
         {
           data: [{ name: edges[0].sender }, { name: edges[0].receiver }],
-          label: { show: false },
+          label: { show: true, position: 'outside', distance: 10 },
         },
       ],
     });

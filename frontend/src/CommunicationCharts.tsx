@@ -11,7 +11,6 @@ import {
   AriaComponent,
   DataZoomComponent,
   GridComponent,
-  GraphicComponent,
   LegendComponent,
   MarkLineComponent,
   ToolboxComponent,
@@ -30,7 +29,6 @@ use([
   AriaComponent,
   DataZoomComponent,
   GridComponent,
-  GraphicComponent,
   LegendComponent,
   MarkLineComponent,
   ToolboxComponent,
@@ -78,14 +76,23 @@ export function timelineOption(
     animation: false,
     aria: { enabled: true, label: { description: translate('timelineHelp') } },
     color: colors,
-    grid: { top: 54, left: 58, right: 25, bottom: 85 },
+    grid: { top: 65, left: 66, right: 25, bottom: 85 },
     tooltip: {
       trigger: 'axis',
       renderMode: 'richText',
       confine: true,
       axisPointer: { type: 'shadow' },
     },
-    legend: { top: 10, left: 12, data: directions.map(translate) },
+    legend: {
+      top: 12,
+      left: 16,
+      right: 45,
+      itemWidth: 16,
+      itemHeight: 10,
+      itemGap: 24,
+      textStyle: { fontSize: 12 },
+      data: directions.map(translate),
+    },
     toolbox: {
       right: 10,
       feature: {
@@ -113,6 +120,8 @@ export function timelineOption(
       type: 'value',
       minInterval: 1,
       name: translate('count'),
+      nameLocation: 'middle',
+      nameGap: 48,
       axisLabel: { color: '#667b73' },
       splitLine: { lineStyle: { color: '#dce6e1' } },
     },
@@ -279,84 +288,10 @@ export function chordOption(
     Math.min((size.width - 180) / 2, (size.height - 100) / 2)
   );
   const center = { x: size.width / 2, y: size.height / 2 };
-  const weights = identities.map((name) =>
-    edges.reduce(
-      (sum, edge) =>
-        sum +
-        (edge.sender === name ? edge.count : 0) +
-        (edge.receiver === name ? edge.count : 0),
-      0
-    )
-  );
-  const total = weights.reduce((sum, value) => sum + value, 0);
-  const padding = Math.min(
-    (4 * Math.PI) / 180,
-    (2 * Math.PI) / Math.max(1, identities.length)
-  );
-  const available = 2 * Math.PI - padding * identities.length;
-  let angle = -Math.PI / 2;
-  // Match the fixed clockwise chord layout, then place labels independently of tiny arcs.
-  const anchors = identities.map((name, index) => {
-    const span = total ? (available * weights[index]) / total : 0;
-    const middle = angle + span / 2;
-    angle += span + padding;
-    const identity = name.match(/\[upid (\d+)\]$/)?.[1];
-    return {
-      index,
-      name,
-      left: Math.cos(middle) < 0,
-      x: center.x + radius * Math.cos(middle),
-      y: center.y + radius * Math.sin(middle),
-      text: identity ? `UPID ${identity}` : translate('unavailable'),
-    };
-  });
-  const graphics: Record<string, unknown>[] = [];
-  for (const left of [true, false]) {
-    const side = anchors
-      .filter((anchor) => anchor.left === left)
-      .sort((first, second) => first.y - second.y);
-    side.forEach((anchor, index) => {
-      const y = 55 + ((size.height - 100) * (index + 0.5)) / side.length;
-      const elbow = center.x + (left ? -1 : 1) * (radius + 12);
-      const end = left ? 82 : size.width - 82;
-      graphics.push({
-        id: `chord-leader-${anchor.index}`,
-        type: 'polyline',
-        silent: true,
-        z: 10,
-        shape: {
-          points: [
-            [anchor.x, anchor.y],
-            [elbow, anchor.y],
-            [elbow, y],
-            [end, y],
-          ],
-        },
-        style: { stroke: '#94aaa0', lineWidth: 1, fill: null },
-      });
-      graphics.push({
-        id: `chord-label-${anchor.index}`,
-        type: 'text',
-        silent: true,
-        z: 11,
-        x: left ? 12 : size.width - 12,
-        y,
-        style: {
-          text: anchor.text,
-          align: left ? 'left' : 'right',
-          verticalAlign: 'middle',
-          fill: '#173c36',
-          fontSize: 11,
-          lineHeight: 15,
-        },
-      });
-    });
-  }
   return {
     animation: false,
     aria: { enabled: true, label: { description: translate('chordHelp') } },
     color: ['#236a5c', '#598fc2', '#b98a4e', '#8a79ad', '#6a9b8a', '#a96964'],
-    graphic: graphics,
     tooltip: {
       trigger: 'item',
       renderMode: 'richText',
@@ -396,7 +331,7 @@ export function chordOption(
         radius: [Math.max(10, radius - 18), radius],
         startAngle: 90,
         clockwise: true,
-        padAngle: (padding * 180) / Math.PI,
+        padAngle: 6,
         data: identities.map((name) => ({ name })),
         // Retain directed links separately; do not collapse reciprocal requests into a sum.
         links: edges.map((edge) => ({
@@ -405,14 +340,18 @@ export function chordOption(
           value: edge.count,
         })),
         label: {
-          show: false,
+          show: true,
           position: 'outside',
-          fontSize: 10,
+          distance: 10,
+          fontSize: 11,
           lineHeight: 14,
           color: '#173c36',
-          formatter: (item: { name: string }) => processLabel(item.name),
+          formatter: (item: { name: string }) => {
+            const upid = item.name.match(/\[upid (\d+)\]$/)?.[1];
+            return upid ? `UPID ${upid}` : translate('unavailable');
+          },
         },
-        labelLayout: { moveOverlap: 'shiftY', hideOverlap: true },
+        labelLayout: { hideOverlap: true },
         lineStyle: { color: 'source', opacity: 0.4 },
         emphasis: { focus: 'adjacency', lineStyle: { opacity: 0.85 } },
       },

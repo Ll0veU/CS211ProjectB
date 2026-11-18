@@ -1,7 +1,6 @@
 """Compare repeated workloads and evaluate a transparent centroid classifier."""
 import argparse
 import json
-import math
 import statistics
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -10,53 +9,7 @@ from .analyzer import save_json
 from .protocol import validate
 from . import resources
 
-WORKLOADS = ("W0", "W1", "W2")
-FEATURES = ("incoming_per_second", "outgoing_per_second", "distinct_peers",
-            "async_fraction", "active_second_fraction")
-
-
-def logical_agent(run):
-    """Legacy package choices must not turn one Gemini experience into two agents."""
-    if run.get("agent_id"):
-        return run["agent_id"]
-    package = run["target_package"]
-    return "gemini" if package in ("com.google.android.apps.bard", "com.google.android.googlequicksearchbox") else package
-
-
-def features(summary):
-    count = summary["transaction_count"]
-    bins = summary["timeline"]
-    return (
-        summary["rates_per_second"]["incoming"] or 0,
-        summary["rates_per_second"]["outgoing"] or 0,
-        summary["peer_process_count"],
-        summary["transaction_types"].get("async", 0) / count if count else 0,
-        sum(any(b[k] for k in ("incoming", "outgoing", "internal")) for b in bins) / len(bins),
-    )
-
-
-def evaluate(samples):
-    predictions = []
-    for agent in sorted({s["agent"] for s in samples}):
-        training = [s for s in samples if s["agent"] != agent]
-        held_out = [s for s in samples if s["agent"] == agent]
-        groups = {w: [s["features"] for s in training if s["actual"] == w] for w in WORKLOADS}
-        if any(not values for values in groups.values()):
-            predictions.extend({**s, "predicted": "uncertain", "reason": "Missing training workloads"}
-                               for s in held_out)
-            continue
-        scales = [statistics.pstdev(column) or 1 for column in zip(*(s["features"] for s in training))]
-        centers = {w: [statistics.mean(column) for column in zip(*values)]
-                   for w, values in groups.items()}
-        for sample in held_out:
-            distances = sorted((math.sqrt(sum(((x - center) / scale) ** 2
-                               for x, center, scale in zip(sample["features"], centroid, scales))), w)
-                               for w, centroid in centers.items())
-            best, runner_up = distances[:2]
-            margin = (runner_up[0] - best[0]) / max(runner_up[0], 1e-9)
-            predictions.append({**sample, "predicted": best[1] if margin >= .20 else "uncertain",
-                                "relative_margin": margin, "distances": {w: d for d, w in distances}})
-    return predictions
+from .behavior_classifier import WORKLOADS, FEATURES, logical_agent, features, evaluate
 
 
 def report(root):

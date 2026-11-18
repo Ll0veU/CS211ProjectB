@@ -4,7 +4,6 @@ The observer is present in every arm. Deltas are instrumented comparisons,
 not a claim that ADB/dumpsys has no cost. No battery-stat resets or root.
 """
 import csv
-import hashlib
 import json
 import re
 import statistics
@@ -14,10 +13,7 @@ from collections import defaultdict
 from . import collector, resource_quality
 from .analyzer import save_json
 
-CONTROLLER = "edu.cs211.projectb"
-MODES = ("resource_agent", "resource_controller", "resource_trace")
-VERSION = "adb-dumpsys-v1"
-CURRENT_OBSERVER = "adb-proc-stat-v2"
+from .resource_contracts import CONTROLLER, MODES, VERSION, CURRENT_OBSERVER
 
 
 def belongs(name, package):
@@ -308,153 +304,10 @@ def save(folder, run, samples, elapsed, finished_normally):
 
 
 def capture(run, folder, stop, update):
-    """Called only after resource-mode validation; never called by legacy runs."""
-    serial = run["serial"]
-    if run.get("protocol_version"):
-        battery = parse_battery(collector.adb("shell", "dumpsys", "battery", serial=serial))
-        if battery["powered"] is not False:
-            raise RuntimeError("Confirm the phone is unplugged before resource recording")
-        temperature = battery["temperature_tenths_c"]
-        baseline = run.get("temperature_baseline_c")
-        if baseline is not None and temperature is not None and abs(temperature / 10 - baseline) > 2:
-            raise RuntimeError("Wait until the phone is within 2 degrees C of the pilot temperature")
-        update(resource_preflight={"battery": battery, "temperature_control_available": temperature is not None})
-        if run["mode"] != "resource_agent":
-            services = collector.adb("shell", "dumpsys", "activity", "services", CONTROLLER, serial=serial)
-            if re.search(r"ServiceRecord\{[^\n]*(?:ExperimentMarkerService|FloatingMarkersService)", services):
-                raise RuntimeError("Stop marker services using the controller resource-profile button before B/C")
-    if run["mode"] == "resource_agent":
-        # Explicit UI acknowledgment is required by the server; only our controller is stopped.
-        collector.adb("shell", "am", "force-stop", CONTROLLER, serial=serial)
-    update(status="settling", settling_seconds=run["settle_seconds"],
-           settling_until=time.time() + run["settle_seconds"])
-    if stop.wait(run["settle_seconds"]):
-        raise RuntimeError("Resource experiment stopped before measurement")
-    targets = run.get("target_packages") or run["target_package"]
-    if run.get("observer") == CURRENT_OBSERVER:
-        from .resource_proc import Probe as CounterProbe
-        probe = CounterProbe(serial, targets)
-    else:
-        probe = Probe(serial, targets)
-    fingerprint = collector.adb("shell", "getprop", "ro.build.fingerprint", serial=serial)
-    version = collector.package_details(serial, run["target_package"])
-    controller_version = collector.package_details(serial, CONTROLLER)
-    update(resource_identity={"build": fingerprint, "agent": version, "controller": controller_version,
-                              "target_packages": run.get("target_packages", [run["target_package"]]),
-                              "identity_snapshot": run.get("identity_snapshot"),
-                              "trace_config_sha256": hashlib.sha256(collector.CONFIG.read_bytes()).hexdigest()})
-    recording = collector.Recording(run, folder) if run["mode"] == "resource_trace" else None
-    samples, started, finished, trace = [], None, False, None
-    try:
-        if recording:
-            # Include observer startup/finalization margin without silently cutting the fixed window.
-            recording.duration = run["duration_seconds"] + 45
-            recording.start()
-        started = time.monotonic()
-        update(status="recording", resource_started_at=time.time())
-        deadline = started + run["duration_seconds"]
-        while True:
-            samples.append(probe.sample(started))
-            save_json(folder / "resources.json", {"observer": run.get("observer", VERSION), "run_id": run["id"], "samples": samples})
-            if time.monotonic() >= deadline:
-                finished = not stop.is_set()
-                break
-            next_tick = min(deadline, started + len(samples) * run["sample_interval_seconds"])
-            if stop.wait(max(0, next_tick - time.monotonic())):
-                break
-        update(status="collecting")
-    finally:
-        if started is not None:
-            save(folder, run, samples, time.monotonic() - started, finished)
-        if recording and recording.pid:
-            trace = recording.collect(True)
-    return trace
+    from .resource_capture import capture as acquire
+    return acquire(run, folder, stop, update)
 
 
 def compare(root):
-    buckets, excluded, comparisons = defaultdict(lambda: defaultdict(list)), [], []
-    for path in sorted(root.glob("*/metadata.json")):
-        run = json.loads(path.read_text(encoding="utf-8"))
-        if run.get("mode") not in MODES:
-            continue
-        if run.get("protocol_version") and (run.get("phase") != "formal" or not run.get("scope_confirmed")
-                                            or run.get("superseded_by_trial") or not run.get("conditions_confirmed")
-                                            or not run.get("idle_undisturbed") or run.get("deviations", "").strip()):
-            excluded.append({"id": run.get("id"), "issues": ["Pilot, superseded attempt, or unreviewed protocol/scope"]})
-            continue
-        summary_path = path.with_name("resources_summary.json")
-        if run.get("status") != "complete" or run.get("outcome") != "success" or not summary_path.is_file():
-            excluded.append({"id": run.get("id"), "issues": ["Requires completed capture and confirmed scenario success"]})
-            continue
-        summary = json.loads(summary_path.read_text(encoding="utf-8"))
-        if "sampling_quality" not in summary:
-            raw_path = path.with_name("resources.json")
-            samples = json.loads(raw_path.read_text(encoding="utf-8")).get("samples", []) if raw_path.is_file() else []
-            summary["sampling_quality"] = resource_quality.describe(samples, summary, run.get("trace_bytes"))
-        issues = list(summary["issues"])
-        identity = run.get("resource_identity")
-        if not identity or not run.get("device_label") or not run.get("conditions"):
-            issues.append("Missing device, conditions or version evidence")
-        if run.get("mode") == "resource_trace" and not path.with_name("capture.pftrace").is_file():
-            issues.append("Traced arm has no captured trace")
-        if issues:
-            excluded.append({"id": run["id"], "issues": issues})
-            continue
-        key = (run["device_label"], run["conditions"], run.get("agent_id", run["target_package"]), run["workload"],
-               run["repetition"], run["duration_seconds"], run["sample_interval_seconds"], run["settle_seconds"],
-               json.dumps(identity, sort_keys=True), summary["observer"], run.get("campaign_id"), run.get("attempt", 1))
-        buckets[key][run["mode"]].append((run, summary))
-    for key, arms in buckets.items():
-        if any(len(arms[m]) != 1 for m in MODES):
-            excluded.append({"device": key[0], "conditions": key[1], "repetition": key[4],
-                             "issues": ["Need exactly one valid run in each of the three arms"],
-                             "run_ids": [r["id"] for entries in arms.values() for r, _ in entries]})
-            continue
-        measurements = {}
-        for mode in MODES:
-            _, summary = arms[mode][0]
-            measurements[mode] = {k: v["median"] for k, v in summary["metrics"].items()}
-            measurements[mode].update({k: summary["battery"][k] for k in (
-                "charge_used_uah", "estimated_energy_mwh", "estimated_mean_power_mw")})
-        differences = {}
-        for name, base, measured in (("controller", MODES[0], MODES[1]),
-                                     ("tracing", MODES[1], MODES[2]), ("total", MODES[0], MODES[2])):
-            differences[name] = {}
-            for metric, b in measurements[base].items():
-                m = measurements[measured][metric]
-                differences[name][metric] = {"baseline": b, "measured": m,
-                    "delta": m - b if m is not None and b is not None else None,
-                    "relative_percent": 100 * (m - b) / b if m is not None and b not in (None, 0) else None,
-                    "reason": "Metric unavailable in one or both arms" if m is None or b is None
-                              else "Relative change undefined for zero baseline" if b == 0 else None}
-        comparisons.append({"device": key[0], "conditions": key[1], "agent": key[2], "workload": key[3],
-                            "repetition": key[4], "duration_seconds": key[5],
-                            "sample_interval_seconds": key[6], "settle_seconds": key[7],
-                            "identity": json.loads(key[8]), "observer": key[9], "campaign_id": key[10],
-                            "attempt": key[11],
-                            "comparability": resource_quality.pair_context({mode: arms[mode][0] for mode in MODES}),
-                            "run_ids": {mode: arms[mode][0][0]["id"] for mode in MODES}, "differences": differences})
-    groups = defaultdict(list)
-    for triple in comparisons:
-        cohort = json.dumps({k: triple[k] for k in ("device", "conditions", "agent", "workload", "duration_seconds",
-                                                   "sample_interval_seconds", "settle_seconds", "identity", "observer", "campaign_id")}, sort_keys=True)
-        groups[cohort].append(triple)
-    aggregates = []
-    for cohort, triples in groups.items():
-        metrics = {}
-        for kind in ("controller", "tracing", "total"):
-            metrics[kind] = {}
-            for metric in triples[0]["differences"][kind]:
-                data = [t["differences"][kind][metric]["delta"] for t in triples
-                        if t["differences"][kind][metric]["delta"] is not None]
-                metrics[kind][metric] = {"valid_triplets": len(data),
-                    "median_delta": statistics.median(data) if data else None,
-                    "min_delta": min(data) if data else None, "max_delta": max(data) if data else None}
-        aggregates.append({**json.loads(cohort), "triplet_count": len(triples),
-                           "three_repetitions_complete": len({t["repetition"] for t in triples}) >= 3,
-                           "metrics": metrics})
-    return {"method": VERSION, "triplets": comparisons, "groups": aggregates, "excluded": excluded,
-            "limitations": ["Instrumented baseline: observer remains active in all arms",
-                            "Total is full minus Agent-only for the tested controller profile; not universal overhead",
-                            "Energy is estimated whole-device energy, not hardware-meter or per-app energy",
-                            "Keep order counterbalanced, screen/network/temperature comparable; retain negative deltas"]}
+    from .resource_compare import compare as compare_arms
+    return compare_arms(root)

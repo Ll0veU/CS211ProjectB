@@ -170,6 +170,11 @@ def bundle(root):
             source = source_root / name
             if source.is_file():
                 write(f"source/{name}", source.read_bytes())
+        # Modular analysis imports must travel with the exported source snapshot.
+        for source in sorted((source_root / "backend").glob("*.py")):
+            name = source.relative_to(source_root).as_posix()
+            if f"source/{name}" not in manifest and not source.is_symlink():
+                write(f"source/{name}", source.read_bytes())
         write("manifest.sha256.json", json.dumps(manifest, ensure_ascii=False, indent=2).encode("utf-8"))
     return buffer.getvalue()
 

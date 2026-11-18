@@ -2,6 +2,7 @@
 
 ## Final UI and repository checks 2026-11-18
 
+- Tooltip lifecycle regression fixed: a newly allocated chord resize callback caused `setOption(notMerge)` on each parent clock render, clearing stationary hover. The new lifecycle test reproduced five unwanted chart updates, then passed after memoizing the callback; actual edge-data changes still update the chart. All 19 frontend tests, TypeScript and production build pass.
 - Follow-up chord label correction supersedes the earlier callout design: use ECharts native outside labels, UPID-only formatting and native overlap hiding, without custom graphics or leader lines. All 18 frontend tests and TypeScript/production build pass; full identities remain in node/link hover payloads. Live W0 inspection verifies adjacent arc labels and no console errors. No trace or experiment metadata is modified.
 - Sticky-header acceptance: title, navigation and device status remain at viewport top after scrolling more than 1,400 pixels; the measured sidebar offset stays below the header. Timeline legends and the left-side count-axis title no longer overlap. Screenshot evidence stays in the ignored study diagnostics directory.
 - Replaced the native language select with a translation-icon popover, current-language checkmark and language-code badges. Keyboard navigation, Escape/outside dismissal and draft preservation are covered by tests.

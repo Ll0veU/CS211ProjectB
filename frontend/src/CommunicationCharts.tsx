@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   init,
@@ -558,6 +558,12 @@ export function CommunicationCharts({ data }: { data: Summary }) {
           : graphOption)(data.edges, (key) => t(key)),
     [data.edges, view, t, i18n.language]
   );
+  // Parent clock/polling renders must not reset a stationary pointer's tooltip.
+  const fitChord = useCallback(
+    (width: number, height: number) =>
+      chordOption(data.edges, (key) => t(key), { width, height }),
+    [data.edges, t, i18n.language]
+  );
   return (
     <>
       <h3>{t('timeline')}</h3>
@@ -627,12 +633,7 @@ export function CommunicationCharts({ data }: { data: Summary }) {
         )}
         graph
         height={graphHeight}
-        fitOption={
-          view === 'chord'
-            ? (width, height) =>
-                chordOption(data.edges, (key) => t(key), { width, height })
-            : undefined
-        }
+        fitOption={view === 'chord' ? fitChord : undefined}
       />
     </>
   );

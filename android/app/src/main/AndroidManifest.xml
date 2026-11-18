@@ -21,6 +21,10 @@
             </intent-filter>
         </activity>
         <receiver android:name=".MarkerReceiver" android:exported="false" />
+        <service android:name=".ExperimentMarkerService" android:exported="false" android:foregroundServiceType="specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                      android:value="User-armed experiment event markers and short device-clock timers while operating a separate app" />
+        </service>
         <service android:name=".FloatingMarkersService" android:exported="false"
                  android:foregroundServiceType="specialUse">
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"

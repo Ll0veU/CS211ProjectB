@@ -34,6 +34,11 @@ public final class MainActivity extends Activity {
     private String exportPath;
     private String exportToken;
     private String exportOrigin;
+    private boolean visible;
+    private String locale = MarkerText.defaultLocale();
+
+    @Override protected void onResume() { super.onResume(); visible = true; }
+    @Override protected void onPause() { visible = false; super.onPause(); }
 
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -134,6 +139,42 @@ public final class MainActivity extends Activity {
     }
 
     private final class Bridge {
+        @JavascriptInterface public int protocolVersion() { return 2; }
+
+        @JavascriptInterface public void setLocale(String value) {
+            if ("en".equals(value) || "zh-CN".equals(value)) locale = value;
+        }
+
+        @JavascriptInterface public String boottimeNsString() { return Long.toString(SystemClock.elapsedRealtimeNanos()); }
+
+        @JavascriptInterface public String markerStatus() {
+            return getSharedPreferences("markers", MODE_PRIVATE).getString("last_status", "");
+        }
+
+        @JavascriptInterface public void armRecording(String run, String workload, String token) {
+            if (!run.matches("[0-9a-f]{32}") || !workload.matches("W[012]")) return;
+            runOnUiThread(() -> {
+                if (!visible) { toast(MarkerText.text(locale, "Open the controller before arming markers", "请先在前台打开控制器")); return; }
+                NotificationManager manager = getSystemService(NotificationManager.class);
+                if (!manager.areNotificationsEnabled()) {
+                    toast(MarkerText.text(locale, "Enable notifications before arming phone markers", "请先允许通知，再启用手机标记"));
+                    return;
+                }
+                stopService(new Intent(MainActivity.this, FloatingMarkersService.class));
+                manager.cancel(NOTIFICATION_ID);
+                startForegroundService(new Intent(MainActivity.this, ExperimentMarkerService.class)
+                    .putExtra("run", run).putExtra("workload", workload).putExtra("origin", origin)
+                    .putExtra("token", token).putExtra("locale", locale));
+            });
+        }
+
+        @JavascriptInterface public void resourceProfile() {
+            runOnUiThread(() -> {
+                stopService(new Intent(MainActivity.this, ExperimentMarkerService.class));
+                stopService(new Intent(MainActivity.this, FloatingMarkersService.class));
+                getSystemService(NotificationManager.class).cancel(NOTIFICATION_ID);
+            });
+        }
         @JavascriptInterface public boolean floatingMarkersEnabled() {
             return android.provider.Settings.canDrawOverlays(MainActivity.this);
         }
@@ -164,12 +205,12 @@ public final class MainActivity extends Activity {
         }
 
         @JavascriptInterface public String loadState(String key) {
-            if (!key.matches("token|run|device_label|conditions")) return "";
+            if (!key.matches("token|run|device_label|conditions|locale|campaign")) return "";
             return getPreferences(MODE_PRIVATE).getString(origin + "/" + key, "");
         }
 
         @JavascriptInterface public void saveState(String key, String value) {
-            if (key.matches("token|run|device_label|conditions") && value.length() <= 2048) {
+            if (key.matches("token|run|device_label|conditions|locale|campaign") && value.length() <= 2048) {
                 getPreferences(MODE_PRIVATE).edit().putString(origin + "/" + key, value).apply();
             }
         }
@@ -187,6 +228,7 @@ public final class MainActivity extends Activity {
         @JavascriptInterface public void exportFile(String path, String token) {
             if (!path.matches("runs/[0-9a-f]{32}/(metadata|summary|transactions|edges|timeline|resources|resources_summary)\\.(json|csv)")
                     && !path.matches("runs/[0-9a-f]{32}/capture\\.pftrace")
+                    && !path.matches("campaigns/[0-9a-f]{32}/(export\\.(json|csv)|guide\\.(en|zh-CN)\\.md)")
                     && !path.equals("evaluation.json")) return;
             runOnUiThread(() -> {
                 exportPath = path;

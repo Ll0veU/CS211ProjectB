@@ -6,7 +6,7 @@ import {
   type EChartsCoreOption,
   type EChartsType,
 } from 'echarts/core';
-import { BarChart, GraphChart, SankeyChart } from 'echarts/charts';
+import { BarChart, ChordChart, GraphChart, SankeyChart } from 'echarts/charts';
 import {
   AriaComponent,
   DataZoomComponent,
@@ -17,12 +17,15 @@ import {
   TooltipComponent,
 } from 'echarts/components';
 import { SVGRenderer } from 'echarts/renderers';
+import { LabelLayout } from 'echarts/features';
 import type { Summary } from './types';
 
 use([
   BarChart,
   GraphChart,
   SankeyChart,
+  ChordChart,
+  LabelLayout,
   AriaComponent,
   DataZoomComponent,
   GridComponent,
@@ -35,6 +38,34 @@ use([
 
 type Translate = (key: string) => string;
 const colors = ['#236a5c', '#598fc2', '#c18a45'];
+export const trafficBands = [
+  { minimum: 1, maximum: 9, label: '1–9', color: '#8296a6' },
+  { minimum: 10, maximum: 99, label: '10–99', color: '#3a9c8a' },
+  { minimum: 100, maximum: 999, label: '100–999', color: '#d09330' },
+  { minimum: 1000, maximum: Infinity, label: '≥1000', color: '#c1534b' },
+];
+
+export function processLabel(name: string) {
+  const [process, identity] = name.split(' [upid ');
+  const lines: string[] = [];
+  let current = '';
+  for (const segment of process.split(/(?<=[./:])/)) {
+    if (current && current.length + segment.length > 18) {
+      lines.push(current);
+      current = '';
+    }
+    for (const chunk of segment.match(/.{1,18}/g) || []) {
+      if (current.length + chunk.length > 18) {
+        lines.push(current);
+        current = '';
+      }
+      current += chunk;
+    }
+  }
+  if (current) lines.push(current);
+  if (identity) lines.push(`[upid ${identity}`);
+  return lines.join('\n');
+}
 
 export function timelineOption(
   data: Summary,
@@ -208,7 +239,7 @@ export function sankeyOption(
         left: '25%',
         right: '25%',
         nodeWidth: 12,
-        nodeGap: 14,
+        nodeGap: 42,
         nodeAlign: 'justify',
         draggable: false,
         data: nodes,
@@ -220,14 +251,85 @@ export function sankeyOption(
         })),
         label: {
           color: '#173c36',
-          fontSize: 11,
+          fontSize: 10,
           width: 120,
-          overflow: 'truncate',
+          lineHeight: 14,
           formatter: (item: { name: string }) =>
-            names.get(item.name) || item.name,
+            processLabel(names.get(item.name) || item.name),
         },
         lineStyle: { color: 'source', opacity: 0.38, curveness: 0.5 },
         emphasis: { focus: 'adjacency', lineStyle: { opacity: 0.8 } },
+      },
+    ],
+  };
+}
+
+export function chordOption(
+  edges: Summary['edges'],
+  translate: Translate
+): EChartsCoreOption {
+  const identities = [
+    ...new Set(edges.flatMap((edge) => [edge.sender, edge.receiver])),
+  ];
+  return {
+    animation: false,
+    aria: { enabled: true, label: { description: translate('chordHelp') } },
+    color: ['#236a5c', '#598fc2', '#b98a4e', '#8a79ad', '#6a9b8a', '#a96964'],
+    tooltip: {
+      trigger: 'item',
+      renderMode: 'richText',
+      confine: true,
+      formatter: (item: {
+        name: string;
+        dataType?: string;
+        data: { source?: string; target?: string; value?: number };
+      }) => {
+        if (item.dataType === 'edge') {
+          return `${item.data.source} →\n${item.data.target}\n${translate('count')}: ${item.data.value}`;
+        }
+        const outgoing = edges
+          .filter((edge) => edge.sender === item.name)
+          .reduce((sum, edge) => sum + edge.count, 0);
+        const incoming = edges
+          .filter((edge) => edge.receiver === item.name)
+          .reduce((sum, edge) => sum + edge.count, 0);
+        return `${item.name}\n${translate('outgoing')}: ${outgoing}\n${translate('incoming')}: ${incoming}`;
+      },
+    },
+    toolbox: {
+      right: 10,
+      feature: {
+        saveAsImage: {
+          type: 'svg',
+          title: translate('saveChart'),
+          name: 'binder-chord',
+          backgroundColor: '#fffefa',
+        },
+      },
+    },
+    series: [
+      {
+        type: 'chord',
+        radius: ['58%', '65%'],
+        padAngle: 4,
+        data: identities.map((name) => ({ name })),
+        // Retain directed links separately; do not collapse reciprocal requests into a sum.
+        links: edges.map((edge) => ({
+          source: edge.sender,
+          target: edge.receiver,
+          value: edge.count,
+        })),
+        label: {
+          show: true,
+          position: 'outside',
+          fontSize: 10,
+          lineHeight: 14,
+          color: '#173c36',
+          formatter: (item: { name: string }) => processLabel(item.name),
+        },
+        labelLayout: { moveOverlap: 'shiftY', hideOverlap: true },
+        lineStyle: { color: 'source', opacity: 0.4 },
+        emphasis: { focus: 'adjacency', lineStyle: { opacity: 0.85 } },
       },
     ],
   };
@@ -294,29 +396,24 @@ export function graphOption(
           name: `${edge.sender} → ${edge.receiver}`,
           value: edge.count,
           lineStyle: {
+            color: trafficBands.find((band) => edge.count <= band.maximum)
+              ?.color,
             width: Math.min(6, 1 + Math.log2(Math.max(1, edge.count)) / 2),
           },
         })),
         edgeSymbol: ['none', 'arrow'],
         edgeSymbolSize: [0, 8],
+        labelLayout: { moveOverlap: 'shiftY' },
         label: {
           show: true,
           position: 'right',
           color: '#173c36',
-          fontSize: 11,
+          fontSize: 10,
           width: 110,
-          overflow: 'truncate',
-          formatter: (item: { name: string }) => {
-            const [process, identity] = item.name.split(' [upid ');
-            const shortName = process.includes('/')
-              ? process.split('/').at(-1)
-              : process.split('.').slice(-2).join('.');
-            return identity
-              ? `${shortName} [${identity}`
-              : shortName || item.name;
-          },
+          lineHeight: 14,
+          formatter: (item: { name: string }) => processLabel(item.name),
         },
-        lineStyle: { color: '#78a491', opacity: 0.5, curveness: 0.18 },
+        lineStyle: { opacity: 0.8, curveness: 0.18 },
         emphasis: {
           focus: 'adjacency',
           lineStyle: { opacity: 1 },
@@ -331,11 +428,15 @@ function Chart({
   option,
   label,
   graph = false,
+  height,
 }: {
   option: EChartsCoreOption;
   label: string;
   graph?: boolean;
+  height?: number;
 }) {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
   const element = useRef<HTMLDivElement>(null);
   const chart = useRef<EChartsType | null>(null);
   useEffect(() => {
@@ -353,28 +454,62 @@ function Chart({
   useEffect(() => {
     chart.current?.setOption(option, { notMerge: true });
   }, [option]);
+  useEffect(() => {
+    if (!expanded) return;
+    const close = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setExpanded(false);
+    };
+    document.addEventListener('keydown', close);
+    return () => document.removeEventListener('keydown', close);
+  }, [expanded]);
   return (
-    <div
-      ref={element}
-      className={`echart ${graph ? 'echart-graph' : 'echart-timeline'}`}
-      role="img"
-      aria-label={label}
-    />
+    <div className={`chart-frame ${expanded ? 'chart-expanded' : ''}`}>
+      {graph && (
+        <button
+          type="button"
+          className="secondary chart-expand"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          {t(expanded ? 'collapseChart' : 'expandChart')}
+        </button>
+      )}
+      <div
+        ref={element}
+        className={`echart ${graph ? 'echart-graph' : 'echart-timeline'}`}
+        style={expanded ? { height: '100%' } : height ? { height } : undefined}
+        role="img"
+        aria-label={label}
+      />
+    </div>
   );
 }
 
 export function CommunicationCharts({ data }: { data: Summary }) {
   const { t, i18n } = useTranslation();
-  const [view, setView] = useState<'sankey' | 'network'>('sankey');
+  const [view, setView] = useState<'sankey' | 'network' | 'chord'>('sankey');
+  const processCount = new Set(
+    data.edges.flatMap((edge) => [edge.sender, edge.receiver])
+  ).size;
+  const largestRole = Math.max(
+    new Set(data.edges.map((edge) => edge.sender)).size,
+    new Set(data.edges.map((edge) => edge.receiver)).size
+  );
+  const graphHeight =
+    view === 'sankey'
+      ? Math.max(480, largestRole * 86 + 70)
+      : Math.max(view === 'chord' ? 680 : 520, processCount * 55);
   const timeline = useMemo(
     () => timelineOption(data, (key) => t(key)),
     [data, t, i18n.language]
   );
   const graph = useMemo(
     () =>
-      (view === 'sankey' ? sankeyOption : graphOption)(data.edges, (key) =>
-        t(key)
-      ),
+      (view === 'sankey'
+        ? sankeyOption
+        : view === 'chord'
+          ? chordOption
+          : graphOption)(data.edges, (key) => t(key)),
     [data.edges, view, t, i18n.language]
   );
   return (
@@ -398,10 +533,37 @@ export function CommunicationCharts({ data }: { data: Summary }) {
         >
           {t('networkGraph')}
         </button>
+        <button
+          className={view === 'chord' ? 'active' : ''}
+          aria-pressed={view === 'chord'}
+          onClick={() => setView('chord')}
+        >
+          {t('chord')}
+        </button>
       </div>
-      <p className="muted">
-        {t(view === 'sankey' ? 'sankeyHelp' : 'graphHelp')}
+      <p className="muted chart-description">
+        {t(
+          view === 'sankey'
+            ? 'sankeyHelp'
+            : view === 'chord'
+              ? 'chordHelp'
+              : 'graphHelp'
+        )}
       </p>
+      {view === 'network' && (
+        <ul className="traffic-legend" aria-label={t('edgeTraffic')}>
+          {trafficBands.map((band) => (
+            <li key={band.minimum}>
+              <span
+                className="traffic-swatch"
+                style={{ backgroundColor: band.color }}
+                aria-hidden="true"
+              />
+              {band.label} {t('requests')}
+            </li>
+          ))}
+        </ul>
+      )}
       {view === 'sankey' && (
         <div className="flow-columns">
           <span>{t('sender')} →</span>
@@ -410,8 +572,15 @@ export function CommunicationCharts({ data }: { data: Summary }) {
       )}
       <Chart
         option={graph}
-        label={t(view === 'sankey' ? 'sankey' : 'networkGraph')}
+        label={t(
+          view === 'sankey'
+            ? 'sankey'
+            : view === 'chord'
+              ? 'chord'
+              : 'networkGraph'
+        )}
         graph
+        height={graphHeight}
       />
     </>
   );

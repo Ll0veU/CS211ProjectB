@@ -16,6 +16,10 @@ The Python server serves the production React bundle and API together on port 87
 
 The header language button opens a keyboard-accessible Chinese/English menu. Communication results use locally bundled ECharts, loaded on demand: stacked request timelines support direction legends, event markers, zoom and SVG export. Directed interactions default to a two-column Sankey view (senders on the left, receivers on the right), with the network graph available as an alternative. A process may appear on both sides in separate roles; each band represents one observed directed edge and its request count, not a verified multi-hop causal path. All edges are retained, and full identities/counts are available on hover and in the existing detail table. Charts resize with the viewport and follow the selected whole-trace/task window and language without modifying stored evidence.
 
+Network links and arrows use fixed request-count bands (1–9, 10–99, 100–999, ≥1000) with a visible legend, while line width also indicates count. These are counts in the selected window, not bytes or rates. Long process labels wrap across lines with UPID on a separate line; chart height scales with process count, and hover retains the original full identity.
+
+A third chord view retains each directed request count separately, with ribbon colors inherited from the sending process. Hover distinguishes sender → receiver and shows exact counts; node tooltips separate incoming/outgoing counts. The enlarged chord ring and expandable chart view support inspection on desktop; Escape closes the expanded view. Label layout avoids overlapping text where possible, while full identities remain available on hover and in the edge table.
+
 On this workstation, `. D:\home\CS211\enter-env.ps1` selects the existing Python/ADB/Perfetto environment. Do not assume a checkout-local `.venv` already exists. The existing environment was created without pip; use its installed dependencies or create an independent environment when necessary.
 
 ## Update the Android controller

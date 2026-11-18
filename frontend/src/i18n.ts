@@ -235,12 +235,18 @@ export const english = {
   timelineHelp:
     'Requests per one-second bin. Hover for counts, toggle directions in the legend, and scroll or drag the slider to zoom. Dashed lines mark saved events.',
   graphHelp:
-    'All observed edges are shown; arrows indicate requests, not a verified causal path. Hover for full process names and counts. Drag to pan and scroll to zoom.',
+    'All observed edges are shown; arrows indicate requests, not a verified causal path.\nColors group request counts; hover for full identities and exact values.\nDrag to pan and scroll to zoom.',
   saveChart: 'Save chart as SVG',
   sankey: 'Sankey flows',
   networkGraph: 'Network graph',
+  chord: 'Chord diagram',
+  expandChart: 'Expand chart',
+  collapseChart: 'Close expanded view',
+  chordHelp:
+    'Arcs represent processes; ribbons show direct request counts, colored by sender.\nHover a ribbon to read its sender → receiver and exact count; opposite directions are retained separately.\nThis view emphasizes communication volume, not execution order or verified causal paths.',
+  edgeTraffic: 'Edge colors by request count in the selected window',
   sankeyHelp:
-    'Left: senders. Right: receivers. Band width represents request count; hover for full names and values. A process can appear on both sides in different roles. Bands show direct requests, not multi-hop causal paths.',
+    'Left: senders. Right: receivers. Band width represents request count.\nA process can appear on both sides in different roles; hover for full names and values.\nBands show direct requests, not multi-hop causal paths.',
   chartLoading: 'Loading charts…',
   resetChart: 'Reset view',
   count: 'Count',
@@ -593,12 +599,18 @@ export const chinese: Record<keyof typeof english, string> = {
   timelineHelp:
     '按 1 秒分桶统计请求。悬停查看数量，点击图例切换方向，滚动或拖动滑块缩放；虚线表示已保存的事件。',
   graphHelp:
-    '显示全部观测边；箭头表示请求方向，不代表已验证的因果路径。悬停查看完整进程名和数量，拖动平移、滚动缩放。',
+    '显示全部观测边；箭头表示请求方向，不代表已验证的因果路径。\n颜色按请求数分档；悬停查看完整身份和精确数量。\n拖动平移，滚动缩放。',
   saveChart: '导出 SVG 图表',
   sankey: '桑基图',
   networkGraph: '网络图',
+  chord: '和弦图',
+  expandChart: '放大查看',
+  collapseChart: '收起图表',
+  chordHelp:
+    '圆弧代表进程，弦带表示直接请求数量，颜色跟随发送方。\n悬停弦带查看“发送方 → 接收方”和精确数量；相反方向分别保留。\n此图突出通信量，不表示执行顺序或已验证的因果路径。',
+  edgeTraffic: '按所选区间请求数分档的边颜色',
   sankeyHelp:
-    '左侧为发送方，右侧为接收方；带宽表示请求数，悬停查看完整名称和数值。同一进程可因角色不同出现在两侧；每条带只表示直接请求，不代表多跳因果路径。',
+    '左侧为发送方，右侧为接收方；带宽表示请求数。\n同一进程可因角色不同出现在两侧；悬停查看完整名称和数值。\n每条带只表示直接请求，不代表多跳因果路径。',
   chartLoading: '正在加载图表…',
   resetChart: '重置视图',
   count: '数量',

@@ -1,12 +1,68 @@
 import { describe, expect, it } from 'vitest';
 import {
   graphOption,
+  chordOption,
+  processLabel,
   sankeyOption,
   timelineOption,
 } from './CommunicationCharts';
 import type { Summary } from './types';
 
 describe('communication chart evidence', () => {
+  it('keeps reciprocal counts separate in chord ribbons', () => {
+    const edges = [
+      { sender: 'agent', receiver: 'system', count: 10 },
+      { sender: 'system', receiver: 'agent', count: 4 },
+    ];
+    expect(chordOption(edges, (key) => key)).toMatchObject({
+      series: [
+        {
+          type: 'chord',
+          lineStyle: { color: 'source' },
+          data: [{ name: 'agent' }, { name: 'system' }],
+          links: [
+            { source: 'agent', target: 'system', value: 10 },
+            { source: 'system', target: 'agent', value: 4 },
+          ],
+        },
+      ],
+    });
+  });
+  it('wraps long labels without losing process identity or UPID', () => {
+    const process = 'com.google.android.googlequicksearchbox:interactor';
+    const label = processLabel(`${process} [upid 1222]`);
+    const lines = label.split('\n');
+    expect(lines.at(-1)).toBe('[upid 1222]');
+    expect(lines.slice(0, -1).join('')).toBe(process);
+    expect(lines.every((line) => line.length <= 18)).toBe(true);
+  });
+  it('colors directed edges at each request-count boundary', () => {
+    const counts = [1, 9, 10, 99, 100, 999, 1000];
+    const expectedColors = [
+      '#8296a6',
+      '#8296a6',
+      '#3a9c8a',
+      '#3a9c8a',
+      '#d09330',
+      '#d09330',
+      '#c1534b',
+    ];
+    const edges = counts.map((count, index) => ({
+      sender: 'agent',
+      receiver: `peer-${index}`,
+      count,
+    }));
+    expect(graphOption(edges, (key) => key)).toMatchObject({
+      series: [
+        {
+          links: counts.map((count, index) => ({
+            value: count,
+            lineStyle: { color: expectedColors[index] },
+          })),
+        },
+      ],
+    });
+  });
   it('represents reciprocal and self requests as separate sender/receiver flows', () => {
     const edges = [
       { sender: 'agent', receiver: 'system', count: 10 },

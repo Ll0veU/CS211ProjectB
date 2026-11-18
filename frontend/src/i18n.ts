@@ -243,7 +243,7 @@ export const english = {
   expandChart: 'Expand chart',
   collapseChart: 'Close expanded view',
   chordHelp:
-    'Arcs represent processes; ribbons show direct request counts, colored by sender.\nHover a ribbon to read its sender → receiver and exact count; opposite directions are retained separately.\nThis view emphasizes communication volume, not execution order or verified causal paths.',
+    'Labels show trace-local UPIDs; hover for full process names. Ribbons are colored by sender.\nHover a ribbon for sender → receiver and exact request count; opposite directions remain separate.\nUPIDs apply only within this trace. Ribbons do not represent execution order or verified causal paths.',
   edgeTraffic: 'Edge colors by request count in the selected window',
   sankeyHelp:
     'Left: senders. Right: receivers. Band width represents request count.\nA process can appear on both sides in different roles; hover for full names and values.\nBands show direct requests, not multi-hop causal paths.',
@@ -607,7 +607,7 @@ export const chinese: Record<keyof typeof english, string> = {
   expandChart: '放大查看',
   collapseChart: '收起图表',
   chordHelp:
-    '圆弧代表进程，弦带表示直接请求数量，颜色跟随发送方。\n悬停弦带查看“发送方 → 接收方”和精确数量；相反方向分别保留。\n此图突出通信量，不表示执行顺序或已验证的因果路径。',
+    '标签仅显示 trace 内 UPID，悬停查看完整进程名；弦带颜色跟随发送方。\n悬停弦带查看“发送方 → 接收方”和精确请求数；相反方向分别保留。\nUPID 只在当前 trace 内有效；弦带不表示执行顺序或已验证的因果路径。',
   edgeTraffic: '按所选区间请求数分档的边颜色',
   sankeyHelp:
     '左侧为发送方，右侧为接收方；带宽表示请求数。\n同一进程可因角色不同出现在两侧；悬停查看完整名称和数值。\n每条带只表示直接请求，不代表多跳因果路径。',

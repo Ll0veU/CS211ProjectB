@@ -9,6 +9,54 @@ import {
 import type { Summary } from './types';
 
 describe('communication chart evidence', () => {
+  it('labels chord nodes only by trace-local UPID and preserves full hover identities', () => {
+    const edges = [
+      {
+        sender: 'com.example.agent [upid 949]',
+        receiver: 'system_server [upid 788]',
+        count: 10,
+      },
+    ];
+    const option = chordOption(edges, (key) => key, {
+      width: 1000,
+      height: 680,
+    });
+    const graphics = option.graphic as {
+      id: string;
+      style: { text?: string };
+    }[];
+    expect(
+      graphics
+        .filter((item) => item.id.startsWith('chord-label-'))
+        .map((item) => item.style.text)
+        .sort()
+    ).toEqual(['UPID 788', 'UPID 949']);
+    expect(option).toMatchObject({
+      series: [
+        {
+          data: [{ name: edges[0].sender }, { name: edges[0].receiver }],
+          label: { show: false },
+        },
+      ],
+    });
+    const tooltip = option.tooltip as {
+      formatter: (item: {
+        name: string;
+        dataType: string;
+        data: { source?: string; target?: string; value?: number };
+      }) => string;
+    };
+    expect(
+      tooltip.formatter({ name: edges[0].sender, dataType: 'node', data: {} })
+    ).toContain('com.example.agent [upid 949]');
+    expect(
+      tooltip.formatter({
+        name: '',
+        dataType: 'edge',
+        data: { source: edges[0].sender, target: edges[0].receiver, value: 10 },
+      })
+    ).toContain('com.example.agent [upid 949] →\nsystem_server [upid 788]');
+  });
   it('keeps reciprocal counts separate in chord ribbons', () => {
     const edges = [
       { sender: 'agent', receiver: 'system', count: 10 },

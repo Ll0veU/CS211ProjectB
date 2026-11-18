@@ -20,6 +20,8 @@ Network links and arrows use fixed request-count bands (1–9, 10–99, 100–99
 
 A third chord view retains each directed request count separately, with ribbon colors inherited from the sending process. Hover distinguishes sender → receiver and shows exact counts; node tooltips separate incoming/outgoing counts. The enlarged chord ring and expandable chart view support inspection on desktop; Escape closes the expanded view. Label layout avoids overlapping text where possible, while full identities remain available on hover and in the edge table.
 
+Chord labels display only trace-local UPIDs in two exterior columns with leader lines. Hover the corresponding arc or ribbon for full process names and counts. A UPID must not be treated as a stable identifier across different traces. Responsive annotations are recomputed when the chart is resized or expanded; process names in stored evidence remain unchanged.
+
 On this workstation, `. D:\home\CS211\enter-env.ps1` selects the existing Python/ADB/Perfetto environment. Do not assume a checkout-local `.venv` already exists. The existing environment was created without pip; use its installed dependencies or create an independent environment when necessary.
 
 ## Update the Android controller

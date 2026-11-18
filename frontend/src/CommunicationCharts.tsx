@@ -11,6 +11,7 @@ import {
   AriaComponent,
   DataZoomComponent,
   GridComponent,
+  GraphicComponent,
   LegendComponent,
   MarkLineComponent,
   ToolboxComponent,
@@ -29,6 +30,7 @@ use([
   AriaComponent,
   DataZoomComponent,
   GridComponent,
+  GraphicComponent,
   LegendComponent,
   MarkLineComponent,
   ToolboxComponent,
@@ -266,15 +268,95 @@ export function sankeyOption(
 
 export function chordOption(
   edges: Summary['edges'],
-  translate: Translate
+  translate: Translate,
+  size = { width: 800, height: 680 }
 ): EChartsCoreOption {
   const identities = [
     ...new Set(edges.flatMap((edge) => [edge.sender, edge.receiver])),
   ];
+  const radius = Math.max(
+    35,
+    Math.min((size.width - 180) / 2, (size.height - 100) / 2)
+  );
+  const center = { x: size.width / 2, y: size.height / 2 };
+  const weights = identities.map((name) =>
+    edges.reduce(
+      (sum, edge) =>
+        sum +
+        (edge.sender === name ? edge.count : 0) +
+        (edge.receiver === name ? edge.count : 0),
+      0
+    )
+  );
+  const total = weights.reduce((sum, value) => sum + value, 0);
+  const padding = Math.min(
+    (4 * Math.PI) / 180,
+    (2 * Math.PI) / Math.max(1, identities.length)
+  );
+  const available = 2 * Math.PI - padding * identities.length;
+  let angle = -Math.PI / 2;
+  // Match the fixed clockwise chord layout, then place labels independently of tiny arcs.
+  const anchors = identities.map((name, index) => {
+    const span = total ? (available * weights[index]) / total : 0;
+    const middle = angle + span / 2;
+    angle += span + padding;
+    const identity = name.match(/\[upid (\d+)\]$/)?.[1];
+    return {
+      index,
+      name,
+      left: Math.cos(middle) < 0,
+      x: center.x + radius * Math.cos(middle),
+      y: center.y + radius * Math.sin(middle),
+      text: identity ? `UPID ${identity}` : translate('unavailable'),
+    };
+  });
+  const graphics: Record<string, unknown>[] = [];
+  for (const left of [true, false]) {
+    const side = anchors
+      .filter((anchor) => anchor.left === left)
+      .sort((first, second) => first.y - second.y);
+    side.forEach((anchor, index) => {
+      const y = 55 + ((size.height - 100) * (index + 0.5)) / side.length;
+      const elbow = center.x + (left ? -1 : 1) * (radius + 12);
+      const end = left ? 82 : size.width - 82;
+      graphics.push({
+        id: `chord-leader-${anchor.index}`,
+        type: 'polyline',
+        silent: true,
+        z: 10,
+        shape: {
+          points: [
+            [anchor.x, anchor.y],
+            [elbow, anchor.y],
+            [elbow, y],
+            [end, y],
+          ],
+        },
+        style: { stroke: '#94aaa0', lineWidth: 1, fill: null },
+      });
+      graphics.push({
+        id: `chord-label-${anchor.index}`,
+        type: 'text',
+        silent: true,
+        z: 11,
+        x: left ? 12 : size.width - 12,
+        y,
+        style: {
+          text: anchor.text,
+          align: left ? 'left' : 'right',
+          verticalAlign: 'middle',
+          fill: '#173c36',
+          fontSize: 11,
+          lineHeight: 15,
+        },
+      });
+    });
+  }
   return {
     animation: false,
     aria: { enabled: true, label: { description: translate('chordHelp') } },
     color: ['#236a5c', '#598fc2', '#b98a4e', '#8a79ad', '#6a9b8a', '#a96964'],
+    graphic: graphics,
     tooltip: {
       trigger: 'item',
       renderMode: 'richText',
@@ -310,8 +392,11 @@ export function chordOption(
     series: [
       {
         type: 'chord',
-        radius: ['58%', '65%'],
-        padAngle: 4,
+        center: [center.x, center.y],
+        radius: [Math.max(10, radius - 18), radius],
+        startAngle: 90,
+        clockwise: true,
+        padAngle: (padding * 180) / Math.PI,
         data: identities.map((name) => ({ name })),
         // Retain directed links separately; do not collapse reciprocal requests into a sum.
         links: edges.map((edge) => ({
@@ -320,7 +405,7 @@ export function chordOption(
           value: edge.count,
         })),
         label: {
-          show: true,
+          show: false,
           position: 'outside',
           fontSize: 10,
           lineHeight: 14,
@@ -429,21 +514,34 @@ function Chart({
   label,
   graph = false,
   height,
+  fitOption,
 }: {
   option: EChartsCoreOption;
   label: string;
   graph?: boolean;
   height?: number;
+  fitOption?: (width: number, height: number) => EChartsCoreOption;
 }) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const element = useRef<HTMLDivElement>(null);
   const chart = useRef<EChartsType | null>(null);
+  const currentOptions = useRef({ option, fitOption });
+  currentOptions.current = { option, fitOption };
   useEffect(() => {
     if (!element.current) return;
     const instance = init(element.current, undefined, { renderer: 'svg' });
     chart.current = instance;
-    const observer = new ResizeObserver(() => instance.resize());
+    const observer = new ResizeObserver(() => {
+      instance.resize();
+      const current = currentOptions.current;
+      instance.setOption(
+        current.fitOption
+          ? current.fitOption(instance.getWidth(), instance.getHeight())
+          : current.option,
+        { notMerge: true }
+      );
+    });
     observer.observe(element.current);
     return () => {
       observer.disconnect();
@@ -452,8 +550,15 @@ function Chart({
     };
   }, []);
   useEffect(() => {
-    chart.current?.setOption(option, { notMerge: true });
-  }, [option]);
+    const instance = chart.current;
+    if (instance)
+      instance.setOption(
+        fitOption
+          ? fitOption(instance.getWidth(), instance.getHeight())
+          : option,
+        { notMerge: true }
+      );
+  }, [option, fitOption]);
   useEffect(() => {
     if (!expanded) return;
     const close = (event: KeyboardEvent) => {
@@ -498,7 +603,9 @@ export function CommunicationCharts({ data }: { data: Summary }) {
   const graphHeight =
     view === 'sankey'
       ? Math.max(480, largestRole * 86 + 70)
-      : Math.max(view === 'chord' ? 680 : 520, processCount * 55);
+      : view === 'chord'
+        ? Math.max(680, processCount * 45 + 100)
+        : Math.max(520, processCount * 55);
   const timeline = useMemo(
     () => timelineOption(data, (key) => t(key)),
     [data, t, i18n.language]
@@ -581,6 +688,12 @@ export function CommunicationCharts({ data }: { data: Summary }) {
         )}
         graph
         height={graphHeight}
+        fitOption={
+          view === 'chord'
+            ? (width, height) =>
+                chordOption(data.edges, (key) => t(key), { width, height })
+            : undefined
+        }
       />
     </>
   );

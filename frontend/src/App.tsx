@@ -3,6 +3,8 @@ import {
   useEffect,
   useRef,
   useState,
+  lazy,
+  Suspense,
   type FormEvent,
   type ReactNode,
 } from 'react';
@@ -10,6 +12,11 @@ import { NavLink, Route, Routes, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { api, ApiError, download } from './api';
 import { LanguageSwitcher } from './LanguageSwitcher';
+const CommunicationCharts = lazy(() =>
+  import('./CommunicationCharts').then((module) => ({
+    default: module.CommunicationCharts,
+  }))
+);
 import type {
   Campaign,
   Config,
@@ -1454,10 +1461,6 @@ function Results({ summary }: { summary: Summary }) {
   const { t } = useTranslation();
   const [windowed, setWindowed] = useState(false);
   const data = windowed && summary.task_window ? summary.task_window : summary;
-  const max = Math.max(
-    1,
-    ...data.timeline.map((bin) => bin.incoming + bin.outgoing + bin.internal)
-  );
   return (
     <div className="results">
       <h2>{t('results')}</h2>
@@ -1503,68 +1506,9 @@ function Results({ summary }: { summary: Summary }) {
         {t('latency')}: {number(data.sync_latency_ms.median)} ms / p95{' '}
         {number(data.sync_latency_ms.p95)} ms
       </p>
-      <h3>{t('timeline')}</h3>
-      <svg
-        className="timeline"
-        viewBox="0 0 720 160"
-        role="img"
-        aria-label={t('timeline')}
-      >
-        {[0, 1, 2, 3].map((value) => (
-          <line
-            key={value}
-            x1="0"
-            x2="720"
-            y1={25 + value * 35}
-            y2={25 + value * 35}
-            stroke="#dce6e1"
-          />
-        ))}
-        {data.timeline.map((bin, index) => {
-          const count = bin.incoming + bin.outgoing + bin.internal;
-          return (
-            <rect
-              key={bin.second}
-              x={(index * 720) / data.timeline.length}
-              y={140 - (count / max) * 120}
-              width={Math.max(1, 720 / data.timeline.length - 2)}
-              height={(count / max) * 120}
-              fill="#267468"
-            >
-              <title>
-                {bin.second}s: {count}
-              </title>
-            </rect>
-          );
-        })}
-        {data.markers
-          .filter((marker) => marker.inside_trace)
-          .map((marker, index) => (
-            <line
-              key={index}
-              x1={
-                ((marker.offset_seconds || 0) / data.trace_duration_seconds) *
-                720
-              }
-              x2={
-                ((marker.offset_seconds || 0) / data.trace_duration_seconds) *
-                720
-              }
-              y1="10"
-              y2="145"
-              stroke="#c36b33"
-              strokeWidth="2"
-            >
-              <title>{t(marker.label)}</title>
-            </line>
-          ))}
-      </svg>
-      <div className="axis">
-        <span>0 s</span>
-        <span>{number(data.trace_duration_seconds)} s</span>
-      </div>
-      <h3>{t('graph')}</h3>
-      <ProcessGraph edges={data.edges} />
+      <Suspense fallback={<p className="muted">{t('chartLoading')}</p>}>
+        <CommunicationCharts data={data} />
+      </Suspense>
       <details>
         <summary>
           {t('details')} · {data.edges.length}
@@ -1636,82 +1580,6 @@ function Results({ summary }: { summary: Summary }) {
           </p>
         ))}
       </details>
-    </div>
-  );
-}
-
-function ProcessGraph({ edges }: { edges: Summary['edges'] }) {
-  const { t } = useTranslation();
-  const selected = edges.slice(0, 12);
-  const senders = [...new Set(selected.map((edge) => edge.sender))];
-  const receivers = [...new Set(selected.map((edge) => edge.receiver))];
-  const height = Math.max(senders.length, receivers.length) * 45 + 40;
-  const short = (name: string) =>
-    name.length > 31 ? `${name.slice(0, 29)}…` : name;
-  return (
-    <div className="table-scroll">
-      <svg
-        className="process-graph"
-        width="760"
-        height={height}
-        viewBox={`0 0 760 ${height}`}
-        role="img"
-        aria-label={t('graph')}
-      >
-        <defs>
-          <marker
-            id="edge-arrow"
-            markerWidth="8"
-            markerHeight="8"
-            refX="7"
-            refY="4"
-            orient="auto"
-          >
-            <path d="M0 0 L8 4 L0 8 Z" fill="#4c8b76" />
-          </marker>
-        </defs>
-        {selected.map((edge, index) => (
-          <path
-            key={index}
-            d={`M260 ${35 + senders.indexOf(edge.sender) * 45} C380 ${35 + senders.indexOf(edge.sender) * 45},380 ${35 + receivers.indexOf(edge.receiver) * 45},490 ${35 + receivers.indexOf(edge.receiver) * 45}`}
-            fill="none"
-            stroke="#4c8b76"
-            strokeOpacity=".5"
-            strokeWidth={Math.min(5, 1 + Math.log2(edge.count) / 2)}
-            markerEnd="url(#edge-arrow)"
-          >
-            <title>
-              {edge.sender} → {edge.receiver}: {edge.count}
-            </title>
-          </path>
-        ))}
-        {[
-          { names: senders, offset: 0 },
-          { names: receivers, offset: 500 },
-        ].map(({ names, offset }) =>
-          names.map((name, index) => (
-            <g key={`${offset}-${name}`}>
-              <rect
-                x={offset}
-                y={20 + index * 45}
-                width="260"
-                height="30"
-                rx="4"
-                fill="#e6eee1"
-              />
-              <text
-                x={offset + 10}
-                y={40 + index * 45}
-                fontSize="11"
-                fill="#173c36"
-              >
-                {short(name)}
-                <title>{name}</title>
-              </text>
-            </g>
-          ))
-        )}
-      </svg>
     </div>
   );
 }

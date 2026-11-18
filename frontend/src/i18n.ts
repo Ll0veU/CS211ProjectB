@@ -232,6 +232,17 @@ export const english = {
   latency: 'Matched sync latency',
   timeline: 'Requests over time',
   graph: 'Directed interactions',
+  timelineHelp:
+    'Requests per one-second bin. Hover for counts, toggle directions in the legend, and scroll or drag the slider to zoom. Dashed lines mark saved events.',
+  graphHelp:
+    'All observed edges are shown; arrows indicate requests, not a verified causal path. Hover for full process names and counts. Drag to pan and scroll to zoom.',
+  saveChart: 'Save chart as SVG',
+  sankey: 'Sankey flows',
+  networkGraph: 'Network graph',
+  sankeyHelp:
+    'Left: senders. Right: receivers. Band width represents request count; hover for full names and values. A process can appear on both sides in different roles. Bands show direct requests, not multi-hop causal paths.',
+  chartLoading: 'Loading charts…',
+  resetChart: 'Reset view',
   count: 'Count',
   sender: 'Sender',
   receiver: 'Receiver',
@@ -579,6 +590,17 @@ export const chinese: Record<keyof typeof english, string> = {
   latency: '匹配同步调用延迟',
   timeline: '请求时间线',
   graph: '有向交互',
+  timelineHelp:
+    '按 1 秒分桶统计请求。悬停查看数量，点击图例切换方向，滚动或拖动滑块缩放；虚线表示已保存的事件。',
+  graphHelp:
+    '显示全部观测边；箭头表示请求方向，不代表已验证的因果路径。悬停查看完整进程名和数量，拖动平移、滚动缩放。',
+  saveChart: '导出 SVG 图表',
+  sankey: '桑基图',
+  networkGraph: '网络图',
+  sankeyHelp:
+    '左侧为发送方，右侧为接收方；带宽表示请求数，悬停查看完整名称和数值。同一进程可因角色不同出现在两侧；每条带只表示直接请求，不代表多跳因果路径。',
+  chartLoading: '正在加载图表…',
+  resetChart: '重置视图',
   count: '数量',
   sender: '发送方',
   receiver: '接收方',

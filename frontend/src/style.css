@@ -738,6 +738,26 @@ main {
 .results {
   margin-top: 30px;
 }
+.echart {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f7f9f2;
+}
+.echart-timeline {
+  height: 310px;
+}
+.echart-graph {
+  height: 480px;
+}
+.flow-columns {
+  display: flex;
+  justify-content: space-between;
+  margin: 14px 12px 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
 @media (min-width: 1600px) {
   .workspace {
     grid-template-columns: 275px minmax(500px, 1fr) 270px;

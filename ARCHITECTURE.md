@@ -93,3 +93,5 @@ node --check backend/web/app.js
 Regression coverage includes original backend/API tests, public-import compatibility, domain/HTTP import direction, modular source export, fallback routes/path validation, cross-route connection/draft state, chart lifecycle, fractional markers, edge accounting and language changes. The legacy browser module has an integration test for connection and package selection.
 
 Read-only real-data comparison additionally checks all nine saved run quality results, serialized evaluation, three task trace reanalyses and hashes of 46 original evidence files. Browser acceptance covers existing results, route navigation, bilingual selection, chart variants/expansion and a 390px mobile viewport. No physical experiment or APK installation is implied by these checks.
+
+Publication is also checked from a clean `git archive` source export: fresh `npm ci`, frontend tests/build, Python tests and Android offline build all pass without relying on untracked feature files. `.gitignore` anchors `/runs/` at the repository root so business source under `features/runs/` is versioned while experimental data stay private.

@@ -3,6 +3,7 @@ import csv
 import json
 import math
 import statistics
+import copy
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -158,8 +159,9 @@ def summarize(requests, target, start, end, markers, warnings):
         if 0 <= bucket < len(bins):
             bins[bucket][direction] += 1
     for marker in markers:
-        marker["offset_seconds"] = (marker["boottime_ns"] - start) / SECOND
-        marker["inside_trace"] = start <= marker["boottime_ns"] <= end
+        event_time = int(marker["boottime_ns"])
+        marker["offset_seconds"] = (event_time - start) / SECOND
+        marker["inside_trace"] = start <= event_time <= end
         if not marker["inside_trace"]:
             warnings.append(f"Task marker outside trace: {marker['label']}")
     duration = (end - start) / SECOND
@@ -187,9 +189,12 @@ def summarize(requests, target, start, end, markers, warnings):
 
 
 def analyze(trace, run):
-    from perfetto.trace_processor import TraceProcessor
+    from perfetto.trace_processor import TraceProcessor, TraceProcessorConfig
+    import os
     warnings = []
-    with TraceProcessor(trace=str(trace)) as processor:
+    binary = os.environ.get("PERFETTO_BINARY")
+    config = TraceProcessorConfig(bin_path=binary) if binary else TraceProcessorConfig()
+    with TraceProcessor(trace=str(trace), config=config) as processor:
         bounds = rows(processor, "SELECT start_ts, end_ts FROM trace_bounds")[0]
         if bounds["end_ts"] - bounds["start_ts"] > 600 * SECOND:
             raise ValueError("Expected a single experiment trace of ten minutes or less.")
@@ -199,7 +204,10 @@ def analyze(trace, run):
             packages[uid].add(name)
         for p in rows(processor, "SELECT package_name, uid FROM package_list"):
             packages[p["uid"]].add(p["package_name"])
-        target = target_processes(processes, run["target_package"], run.get("target_uid"), packages)
+        names = run.get("target_packages") or [run["target_package"]]
+        targets = {name: target_processes(processes, name, run.get("packages", {}).get(name,
+                    run.get("target_uid") if name == run["target_package"] else None), packages) for name in names}
+        target = set().union(*targets.values())
         matched = rows(processor, TRANSACTIONS)
         raw = rows(processor, RAW)
         stats = rows(processor, "SELECT name, value FROM stats WHERE value > 0 AND "
@@ -219,6 +227,27 @@ def analyze(trace, run):
     selected, summary = summarize(requests, target, bounds["start_ts"], bounds["end_ts"],
                                   run.get("markers", []), warnings)
     summary["target_processes"] = [p for p in processes if p["upid"] in target]
+    if run.get("protocol_version") or run.get("target_packages"):
+        summary["observation_scope"] = {"agent_id": run.get("agent_id"), "packages": names,
+            "confirmed": run.get("scope_confirmed", False),
+            "limitation": "Activity in the selected package set during the session; not proof that every request was caused by the Agent"}
+        summary["per_package"] = {}
+        for name, identities in targets.items():
+            _, package_summary = summarize(requests, identities, bounds["start_ts"], bounds["end_ts"], [], [])
+            summary["per_package"][name] = {key: package_summary[key] for key in (
+                "transaction_count", "direction_counts", "rates_per_second", "peer_process_count", "sync_latency_ms")}
+        # A union of UPIDs classifies cross-package requests as internal exactly once.
+        from .protocol import SEQUENCES, nanoseconds
+        sequence = SEQUENCES.get(run.get("workload"), ())
+        events = {label: [nanoseconds(marker.get("boottime_ns")) for marker in run.get("markers", [])
+                          if marker.get("label") == label] for label in sequence}
+        summary["task_window"] = None
+        if sequence and all(len(events[label]) == 1 and events[label][0] is not None for label in sequence):
+            left, right = events[sequence[0]][0], events[sequence[-1]][0]
+            if bounds["start_ts"] <= left < right <= bounds["end_ts"]:
+                window_requests = [request for request in requests if left <= request["ts_ns"] < right]
+                _, window = summarize(window_requests, target, left, right, copy.deepcopy(run.get("markers", [])), [])
+                summary["task_window"] = {**window, "start_ns": str(left), "end_ns": str(right)}
     return selected, summary
 
 

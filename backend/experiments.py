@@ -15,6 +15,14 @@ FEATURES = ("incoming_per_second", "outgoing_per_second", "distinct_peers",
             "async_fraction", "active_second_fraction")
 
 
+def logical_agent(run):
+    """Legacy package choices must not turn one Gemini experience into two agents."""
+    if run.get("agent_id"):
+        return run["agent_id"]
+    package = run["target_package"]
+    return "gemini" if package in ("com.google.android.apps.bard", "com.google.android.googlequicksearchbox") else package
+
+
 def features(summary):
     count = summary["transaction_count"]
     bins = summary["timeline"]
@@ -68,15 +76,21 @@ def report(root):
             continue
         cohort = (run.get("device_label") or run.get("serial", "unknown"), run.get("conditions", ""))
         comparisons.append({"id": run["id"], "device": cohort[0], "conditions": cohort[1],
-                            "agent": run["target_package"], "workload": run["workload"],
+                            "agent": logical_agent(run), "workload": run["workload"],
+                            "phase": run.get("phase", "legacy"), "protocol_version": run.get("protocol_version"),
+                            "repetition": run.get("repetition"), "attempt": run.get("attempt", 1),
                             "outcome": run.get("outcome"), "capture_status": run.get("status"),
                             "summary_available": summary is not None,
                             "trace_bytes": run.get("trace_bytes"),
                             "analysis_wall_seconds": run.get("analysis_wall_seconds"),
                             "metrics": {k: summary.get(k) for k in (
                                 "transaction_count", "peer_process_count", "rates_per_second",
-                                "sync_latency_ms", "top_peers", "interfaces", "candidate_paths")}
+                                "sync_latency_ms", "top_peers", "interfaces", "candidate_paths", "task_window", "per_package")}
                             if summary else None})
+        if run.get("protocol_version") and (run.get("phase") != "formal" or not run.get("scope_confirmed")
+                                            or run.get("superseded_by_trial")):
+            exclusions.append({"id": run["id"], "reason": "Pilot, superseded attempt or unreviewed observation scope"})
+            continue
         if run.get("status") != "complete" or not summary_path.is_file():
             exclusions.append({"id": run["id"], "reason": "Run incomplete"})
             continue
@@ -85,15 +99,16 @@ def report(root):
             exclusions.append({"id": run["id"], "reason": "Ground truth or trace quality",
                                "outcome": run.get("outcome"), "issues": quality["issues"]})
             continue
-        agent, workload = run["target_package"], run["workload"]
+        agent, workload = logical_agent(run), run["workload"]
         observed[cohort, agent, workload].append(run)
         if run.get("outcome") != "success":
             exclusions.append({"id": run["id"], "reason": "Classifier uses successful tasks only",
                                "outcome": run.get("outcome")})
             continue
         sample = {"id": run["id"], "agent": agent, "actual": workload,
+                  "analysis_window": "task" if summary.get("task_window") else "whole_trace",
                   "device": cohort[0], "conditions": cohort[1],
-                  "repetition": run["repetition"], "features": features(summary)}
+                  "repetition": run["repetition"], "features": features(summary.get("task_window") or summary)}
         groups[cohort, agent, workload].append(sample)
         samples.append(sample)
     # Never train across phones or differing prompts/input modes.
@@ -120,7 +135,16 @@ def report(root):
         if cohort[1] and sum(all(len({r["repetition"] for r in observed[cohort, a, w]}) >= 3
                    for w in WORKLOADS) for a in agents) >= 2:
             complete_cohorts.append({"device": cohort[0], "conditions": cohort[1]})
+    descriptive = []
+    for (cohort, agent, workload), group in groups.items():
+        descriptive.append({"device": cohort[0], "conditions": cohort[1], "agent": agent, "workload": workload,
+            "valid_successful_runs": len(group), "window": sorted({sample["analysis_window"] for sample in group}),
+            "features": {name: {"median": statistics.median(values), "min": min(values), "max": max(values), "n": len(values)}
+                         for name, values in zip(FEATURES, zip(*(sample["features"] for sample in group)))}})
     return {
+        "descriptive_groups": descriptive,
+        "classification_available": len({sample["agent"] for sample in samples}) >= 2,
+        "classification_requirement": "At least two independent logical agents with valid workload evidence",
         "feature_names": FEATURES,
         "method": "Leave one agent out, nearest workload centroid, standardized on training data",
         "abstention_margin": .20, "coverage": coverage,

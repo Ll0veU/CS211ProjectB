@@ -1,4 +1,7 @@
-buffers { size_kb: 32768 fill_policy: DISCARD }
+# Streaming drains the buffer periodically; DISCARD is incompatible with this mode.
+buffers { size_kb: 32768 fill_policy: RING_BUFFER }
+write_into_file: true
+file_write_period_ms: 1000
 data_sources {
   config {
     name: "linux.ftrace"

@@ -1,0 +1,19 @@
+{
+  "version": "2.0",
+  "prompt": "Open https://www.wikipedia.org in my phone’s browser.",
+  "agent_id": "gemini",
+  "target_packages": ["com.google.android.apps.bard", "com.google.android.googlequicksearchbox"],
+  "task_orders": [["W0", "W1", "W2"], ["W1", "W2", "W0"], ["W2", "W0", "W1"]],
+  "resource_orders": [["resource_agent", "resource_controller", "resource_trace"], ["resource_controller", "resource_trace", "resource_agent"], ["resource_trace", "resource_agent", "resource_controller"]],
+  "resource": {"duration_seconds": 300, "extended_seconds": 540, "sample_interval_seconds": 15, "settle_seconds": 30, "temperature_tolerance_c": 2},
+  "preparation": {"stabilize_seconds": 10, "rest_seconds": 60, "voice_mode": "standard_microphone", "startup": "warm_new_conversation"},
+  "workloads": {
+    "W0": {"capture_seconds": 90, "window_seconds": 30, "markers": ["idle_start", "idle_end", "unexpected_activity"], "sequence": ["idle_start", "idle_end"], "required_fields": ["idle_undisturbed"], "instructions": {"en": "Open a new Gemini conversation, stabilize for 10 seconds, then tap Idle start. Leave the phone untouched for 30 seconds; the phone records the actual timer completion. Report any interruption.", "zh-CN": "打开新的 Gemini 会话，稳定 10 秒后点击“空闲开始”。保持手机 30 秒无操作；手机记录计时器实际结束时刻。报告任何干扰。"}},
+    "W1": {"capture_seconds": 120, "timeout_seconds": 60, "timeout_from": "prompt_submitted", "markers": ["prompt_submitted", "confirmation", "browser_launched"], "sequence": ["prompt_submitted", "browser_launched"], "required_fields": ["browser_package", "actual_url", "page_verified", "confirmation_status"], "instructions": {"en": "Submit the fixed prompt and immediately mark Prompt submitted. Mark each required confirmation. When the actual webpage appears in the external browser, mark Page visible. Stop after 60 seconds without completion.", "zh-CN": "提交固定提示词后立即标记“提示词已提交”。如需确认操作，每次都标记。外部浏览器实际显示网页时点击“网页已显示”。提交后 60 秒未完成则结束。"}},
+    "W2": {"capture_seconds": 150, "timeout_seconds": 60, "timeout_from": "voice_end", "markers": ["voice_start", "voice_end", "response_complete"], "sequence": ["voice_start", "voice_end", "response_complete"], "required_fields": ["recognized_text", "recognized_text_available", "actual_response"], "instructions": {"en": "Use the ordinary microphone, not Live. Mark Voice start, speak the fixed prompt, then mark Voice end. Mark Response complete when the full response finishes. Wait at most 60 seconds after Voice end. Keep read-aloud settings fixed.", "zh-CN": "使用普通麦克风，不使用 Live。标记“语音开始”，口述固定提示词，结束输入时标记“语音结束”。完整响应结束后标记“响应已完成”。从语音结束起最多等待 60 秒。朗读设置保持一致。"}}
+  },
+  "checklist": {
+    "en": ["Use the same phone, account, Gemini mode, network and browser.", "Prepare a new conversation and close the previous target webpage. Do not clear app data or caches.", "Keep brightness and volume fixed; disable automatic brightness and unplug charging.", "Open the controller in the foreground and arm phone markers before task recording.", "Rest at least 60 seconds between trials. For resources, wait until temperature is within 2°C of the pilot baseline.", "Manual markers include operator reaction delay. Device clock precision does not remove that uncertainty."],
+    "zh-CN": ["使用相同手机、账号、Gemini 模式、网络和浏览器。", "准备新会话并关闭前次目标网页。不清除应用数据或缓存。", "固定亮度和音量，关闭自动亮度并断开充电。", "任务录制前，在前台打开控制器并启用手机标记。", "试次间至少休息 60 秒；资源实验需等待温度回到预试基线 ±2°C。", "人工标记包含操作员反应延迟；设备时钟精度不能消除这一不确定性。"]
+  }
+}

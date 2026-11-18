@@ -8,6 +8,7 @@ import {
 } from '@testing-library/react';
 import i18n, { chinese, english } from './i18n';
 import { GroundForm, ReferenceReport, RunPanel } from './App';
+import { LanguageSwitcher } from './LanguageSwitcher';
 import type { Run, ReportReference } from './types';
 
 const run: Run = {
@@ -92,6 +93,66 @@ describe('resource countdown', () => {
       expect(view.container.querySelector('.timer')).toHaveTextContent('269s');
     }
   );
+});
+
+describe('language picker', () => {
+  it('switches languages without losing an unsaved observation', async () => {
+    render(
+      <>
+        <LanguageSwitcher />
+        <GroundForm run={run} token="test" saved={async () => {}} />
+      </>
+    );
+    fireEvent.change(screen.getByLabelText('Observation notes'), {
+      target: { value: 'Keep this draft while changing language' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Interface language' }));
+    expect(
+      screen.getByRole('menuitemradio', { name: 'English (United States)' })
+    ).toHaveAttribute('aria-checked', 'true');
+    fireEvent.click(
+      screen.getByRole('menuitemradio', { name: '中文（中国）' })
+    );
+    await waitFor(() =>
+      expect(screen.getByLabelText('观察笔记')).toHaveValue(
+        'Keep this draft while changing language'
+      )
+    );
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '界面语言' }));
+    expect(
+      screen.getByRole('menuitemradio', { name: '中文（中国）' })
+    ).toHaveAttribute('aria-checked', 'true');
+    fireEvent.click(
+      screen.getByRole('menuitemradio', { name: 'English (United States)' })
+    );
+    await waitFor(() =>
+      expect(screen.getByLabelText('Observation notes')).toHaveValue(
+        'Keep this draft while changing language'
+      )
+    );
+  });
+
+  it('supports arrow navigation, Escape and outside dismissal', () => {
+    render(<LanguageSwitcher />);
+    const trigger = screen.getByRole('button', { name: 'Interface language' });
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+    const englishOption = screen.getByRole('menuitemradio', {
+      name: 'English (United States)',
+    });
+    expect(englishOption).toHaveFocus();
+    fireEvent.keyDown(englishOption, { key: 'ArrowUp' });
+    const chineseOption = screen.getByRole('menuitemradio', {
+      name: '中文（中国）',
+    });
+    expect(chineseOption).toHaveFocus();
+    fireEvent.keyDown(chineseOption, { key: 'Escape' });
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+    fireEvent.click(trigger);
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
 });
 
 describe('operator evidence', () => {

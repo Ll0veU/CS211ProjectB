@@ -9,6 +9,7 @@ import {
 import { NavLink, Route, Routes, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { api, ApiError, download } from './api';
+import { LanguageSwitcher } from './LanguageSwitcher';
 import type {
   Campaign,
   Config,
@@ -244,14 +245,7 @@ export default function App() {
           <Badge good={connected}>
             {connected ? t('connected') : t('disconnected')}
           </Badge>
-          <select
-            aria-label={t('language')}
-            value={locale}
-            onChange={(event) => void i18n.changeLanguage(event.target.value)}
-          >
-            <option value="en">English</option>
-            <option value="zh-CN">简体中文</option>
-          </select>
+          <LanguageSwitcher />
         </div>
       </header>
       <nav className="navigation">

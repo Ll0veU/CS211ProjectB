@@ -2,6 +2,8 @@
 
 The **v2 bilingual React/TypeScript workbench** is documented in [WORKBENCH.md](WORKBENCH.md). Build `frontend` before starting the backend to use the new experiment-plan, pilot-review and native-marker workflow. APK 2.0 is required for v2 phone markers. Historical recordings remain available; a completed capture does not imply formal experimental eligibility.
 
+See [ARCHITECTURE.md](ARCHITECTURE.md) for frontend feature modules, Python HTTP/domain seams, Android responsibilities and refactoring validation. The repository APK is now 2.0.2; an existing phone installation is not updated automatically. New modular-backend source fingerprints differ from older frozen plans: review a protocol revision before resuming formal capture, without rewriting historical identities.
+
 An Android controller and Windows-friendly Python backend for observing Binder requests involving a selected Agent on an unrooted phone. The Agent itself is a separate app. The laptop records with ADB and Perfetto, then serves results to the controller over the lab network.
 
 The primary local checkout is `C:\CS211ProjectB`. Clone this repository with `git clone https://github.com/mingsh1/CS211ProjectB.git`, then run setup commands from its root. Local experiment data, access codes, virtual environments and caches are intentionally excluded from Git. A prebuilt debug APK is available at [artifacts/apk/app-debug.apk](artifacts/apk/app-debug.apk); rebuild from source after Android code changes. See [PLAN.md](PLAN.md) for the original-course-requirement mapping and remaining acceptance gates, and [REPORT_TEMPLATE.md](REPORT_TEMPLATE.md) for the final report outline. Code and fixture tests do not replace real-phone acceptance or the required experimental dataset.

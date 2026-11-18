@@ -6,6 +6,9 @@
 - `android/app/src/main/`: Java controller, notification/overlay markers, and manifest. Gradle configuration and wrapper live in `android/`.
 - `tests/`: regression and mocked API tests. `artifacts/apk/app-debug.apk` is the tracked debug APK.
 - `frontend/`: React/TypeScript workbench, bilingual resources, and component tests. `backend/experiment_protocol.json` is the canonical protocol; plans store immutable snapshots.
+- Keep `frontend/src/App.tsx` as composition only. Routes/state live in `src/app`, business views in `src/features`, pure chart options/runtime in `src/charts`, common UI/storage in `src/shared`, styles in `src/styles`, and translation data in `src/locales`.
+- `backend/server.py` is the CLI/compatibility entry; HTTP belongs in `http_*`, durable coordination in `run_store`, capture/events/quality in `run_*`, and resource acquisition/comparison in `resource_*`. Domain modules must not import HTTP or CLI modules. See `ARCHITECTURE.md`.
+- Android Activity lifecycle, JavaScript bridge, document export, legacy alerts and marker HTTP transport have separate classes. Preserve native bridge method names, pending event IDs/device times, and visible-Activity foreground-service startup.
 - `runs/`: generated traces and exports; ignored by Git. Consult `PLAN.md`, `NEXT_WEEK_PLAN.md`, and `VALIDATION.md` for requirements and acceptance status.
 
 ## Build, Test, and Development Commands
@@ -36,6 +39,8 @@ Use four-space indentation for Python and Java, and two spaces for JavaScript. F
 Use standard-library `unittest` and `unittest.mock`; name files `test_*.py` and methods `test_*`. Cover changed accounting, authentication, lifecycle, or resource logic. Mock ADB/capture operations and use temporary directories. No coverage threshold is configured. Record real-phone checks separately in `VALIDATION.md`; mocks cannot establish Binder capture, marker timing, or measured overhead.
 
 Use Vitest and Testing Library for draft persistence, translated workflows, and API failure behavior. Keep simulated plans outside real run directories. Explain non-obvious timing, attribution, and compatibility decisions with English comments.
+
+After moving analysis code, verify source fingerprints and bundle dependencies. Never rewrite old frozen identity hashes to make new software appear unchanged; keep physical acceptance separate from build/test results.
 
 ## Commit & Pull Request Guidelines
 

@@ -2,6 +2,8 @@
 
 ## Run locally
 
+The module map and refactoring compatibility rules are in [ARCHITECTURE.md](ARCHITECTURE.md). `App.tsx` only composes the provider/layout; feature pages, polling state, chart configuration/runtime, styles and translations live in dedicated modules. The Python CLI delegates to separate HTTP and run-domain modules; the Android Activity delegates bridge, export and alert work.
+
 Use Node 24 and Python 3.10+. From the repository root:
 
 ```powershell
@@ -30,7 +32,7 @@ On this workstation, `. D:\home\CS211\enter-env.ps1` selects the existing Python
 
 ## Update the Android controller
 
-The current device-verified release is **2.0.1 / versionCode 7**. It includes the final stream-reading compatibility fix. The installed APK, Gradle output and `artifacts/apk/app-debug.apk` were checked to have identical SHA-256 hashes before starting the new Vivo campaign. Advance Android versionCode for future installed builds so version labels distinguish actual artifacts.
+The current **device-verified** release remains **2.0.1 / versionCode 7**. It includes the final stream-reading compatibility fix. Its installed/build/published hashes matched when starting the Vivo campaign. The modularized repository build is now **2.0.2 / versionCode 8**, built successfully but not installed or physically accepted. Keep those verification states separate; do not describe a successful build as a device upgrade.
 
 ```powershell
 .\android\gradlew.bat -p android :app:assembleDebug
@@ -62,6 +64,7 @@ The W2 response deadline is 60 seconds after **Voice end**. Voice input duration
 ## Data and compatibility
 
 - The canonical protocol is `backend/experiment_protocol.json`; each plan saves a snapshot and fixed-condition signature.
+- New source identities cover all top-level backend Python modules, including extracted implementations. Older frozen plans remain immutable and therefore do not match the new implementation identity. Review a revision before further formal recording; do not rewrite old hashes or pilot results to bypass that gate. Existing records remain readable and exportable.
 - Task comparison signature v2 excludes Agent/package/model/account identity, plan scope and resource duration. Shared task controls still define the cohort. Freezing a reviewed draft upgrades its derived signature with an audit entry; full configuration hashes, saved pilot records and previously frozen plans remain intact.
 - Plans live in ignored `runs/.campaigns/`. Existing run files retain their original schema and interpretation.
 - Independent reanalysis lives in `runs/.analyses/<source-run>/<analysis-id>/`, with the source SHA-256. It cannot make an incomplete historical run eligible.

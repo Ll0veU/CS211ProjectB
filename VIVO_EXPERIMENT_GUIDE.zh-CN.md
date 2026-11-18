@@ -2,6 +2,8 @@
 
 版本：2026-11-18 · 对应工作台协议 `2.0` · 控制器 `2.0.1 / versionCode 7`
 
+**模块化更新说明：**手机仍是已验收的 2.0.1；仓库已构建 2.0.2 / versionCode 8，但尚未安装。新版后端已按模块拆分，源码身份指纹也随之变化。旧冻结计划保留原样；继续正式采集前需审核协议修订与实际版本，不能直接套用旧冻结指纹。详见 `ARCHITECTURE.md`，不要修改历史记录来绕过身份检查。
+
 适用设备：你的 vivo X80（V2183A）。本文包含条件填写、预试、正式任务、资源 A/B/C、审核、导出和报告步骤。队友 OPPO 的结果仅作方法参考，不能替代本机实验。
 
 **状态说明：**初稿编写时计划和运行记录均为 0。2026-11-18 更新：Gemini 六项有效预试已通过协议检查，操作员确认两包观察范围后，计划已冻结并生成 9 次任务和 9 次资源正式位置；正式采集尚未开始。此前诊断、历史录制、被替代尝试和预试均不计入正式次数。文中的填写示例不是自动适用的实测值。
@@ -453,7 +455,7 @@ PalmClaw 当前只是候选。先在正式计数以外确认：能登录/配置�
 
 - 课程要求整理：`G:\我的云端硬盘\通过 Chrome 保存\CS211\Project B 中文需求整理.md`。
 - 版本化协议：`backend/experiment_protocol.json`；每个计划保存的快照才是该计划的执行依据。
-- UI 字段与提示：`frontend/src/App.tsx`、`frontend/src/i18n.ts`。
+- UI 字段与提示：`frontend/src/features/`、`frontend/src/locales/catalog.ts`；入口为 `frontend/src/App.tsx`。
 - 冻结/重试/分组：`backend/campaigns.py`；任务校验：`backend/protocol.py`。
 - 测量与导出：`RESOURCE_V2.md`、`WORKBENCH.md`、`backend/study_export.py`、`backend/experiments.py`。
 

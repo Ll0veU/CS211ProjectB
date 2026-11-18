@@ -9,6 +9,7 @@
 - Differential read-only audit: all nine saved quality responses and the serialized evaluation equal the pre-refactor running backend; all three accepted task trace reanalyses equal their saved summaries/transactions. SHA-256 checks confirm 46 existing evidence files unchanged. Evidence: `runs/vivo-study-20261118/diagnostics/modularization/capability.json`.
 - Live UI acceptance after safe owned-backend restart: connection, frozen-plan selection, W0 summary/task window (1,391/338 requests), history/plans/comparison routes, teammate reference boundary, Chinese/English language selection, three charts/expansion and 390px viewport (no document overflow) pass without browser warning/error logs. Existing nine run records remain terminal; no experiment was started.
 - Source exports include all extracted Python implementations. New identity snapshots hash all backend Python source files; old frozen plan identities remain unchanged and require protocol revision review before further formal capture. Raw records were not migrated or marked newly valid. Existing Vite chunk-size and dependency-audit limitations remain unchanged.
+- Publication completeness audit caught the original unanchored `runs/` ignore rule also excluding `frontend/src/features/runs/`. Anchored it to `/runs/`, included the feature sources, and verified relative module dependencies against tracked files; raw root experiment data remain ignored. A clean Git-export build is required before final completion.
 
 ## Final UI and repository checks 2026-11-18
 

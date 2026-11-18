@@ -1,0 +1,149 @@
+@media (min-width: 1600px) {
+  .workspace {
+    grid-template-columns: 275px minmax(500px, 1fr) 270px;
+    gap: 32px;
+  }
+  .paper {
+    padding: 38px;
+  }
+}
+@media (max-width: 1150px) {
+  .workspace {
+    grid-template-columns: 220px minmax(360px, 1fr);
+    padding: 22px;
+    gap: 20px;
+  }
+  .review-rail {
+    display: none;
+  }
+  .topbar {
+    padding: 20px 22px;
+  }
+  .navigation,
+  .context-strip {
+    padding-left: 22px;
+    padding-right: 22px;
+  }
+  .paper {
+    padding: 25px;
+  }
+}
+@media (max-width: 740px) {
+  .topbar {
+    padding: 16px;
+    gap: 12px;
+  }
+  .wordmark strong {
+    font-size: 15px;
+  }
+  .wordmark small {
+    font-size: 8px;
+  }
+  .brand-icon {
+    width: 34px;
+    height: 38px;
+    font-size: 25px;
+  }
+  .top-actions {
+    gap: 8px;
+  }
+  .top-actions .badge {
+    display: none;
+  }
+  .navigation {
+    gap: 22px;
+    padding: 0 16px;
+    overflow: auto;
+  }
+  .navigation a {
+    font-size: 12px;
+    padding: 14px 0;
+  }
+  .context-strip {
+    gap: 23px;
+    padding: 12px 16px;
+    font-size: 11px;
+  }
+  .workspace {
+    display: block;
+    padding: 15px;
+  }
+  .queue-panel {
+    position: static;
+    margin-bottom: 18px;
+  }
+  .queue-panel .eyebrow {
+    margin-bottom: 8px;
+  }
+  .queue-list {
+    display: flex;
+    max-height: none;
+    gap: 5px;
+    margin: 10px 0;
+    overflow-x: auto;
+  }
+  .queue-item {
+    min-width: 170px;
+    border: 1px solid var(--line);
+    padding: 10px;
+    border-radius: 5px;
+  }
+  .queue-panel > .full,
+  .aside-note {
+    display: none;
+  }
+  .paper {
+    padding: 21px 18px;
+  }
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .paper h1 {
+    font-size: 29px;
+  }
+  .alert {
+    margin: 12px 15px 0;
+  }
+  .condition-list {
+    grid-template-columns: 1fr 1fr;
+  }
+  .metrics strong {
+    font-size: 26px;
+  }
+  .metrics small {
+    font-size: 10px;
+  }
+  .button-row button {
+    flex: 1;
+  }
+  button {
+    min-height: 44px;
+  }
+  .marker-track > div {
+    min-width: 120px;
+  }
+  .event-list code {
+    font-size: 10px;
+  }
+  .status-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .lead {
+    font-size: 14px;
+  }
+  blockquote {
+    font-size: 19px;
+  }
+  .segmented {
+    display: flex;
+  }
+  .segmented button {
+    flex: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}

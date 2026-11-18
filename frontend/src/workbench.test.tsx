@@ -7,7 +7,9 @@ import {
   waitFor,
 } from '@testing-library/react';
 import i18n, { chinese, english } from './i18n';
-import { GroundForm, ReferenceReport, RunPanel } from './App';
+import { GroundForm } from './features/runs/GroundForm';
+import { RunPanel } from './features/runs/RunPanel';
+import { ReferenceReport } from './features/analysis/ReferenceReport';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import type { Run, ReportReference } from './types';
 

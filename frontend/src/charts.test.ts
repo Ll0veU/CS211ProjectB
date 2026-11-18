@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import {
-  graphOption,
-  chordOption,
-  processLabel,
-  sankeyOption,
-  timelineOption,
-} from './CommunicationCharts';
+import { graphOption } from './charts/network';
+import { chordOption } from './charts/chord';
+import { processLabel } from './charts/shared';
+import { sankeyOption } from './charts/sankey';
+import { timelineOption } from './charts/timeline';
 import type { Summary } from './types';
 
 describe('communication chart evidence', () => {

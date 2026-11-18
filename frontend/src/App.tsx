@@ -89,6 +89,19 @@ function Badge({
 }
 
 export default function App() {
+  const header = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!header.current) return;
+    // Keep scrolling targets and sticky sidebars below the responsive header.
+    const observer = new ResizeObserver((entries) => {
+      document.documentElement.style.setProperty(
+        '--header-height',
+        `${entries[0].target.getBoundingClientRect().height}px`
+      );
+    });
+    observer.observe(header.current);
+    return () => observer.disconnect();
+  }, []);
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [token, setToken] = useState(
@@ -240,47 +253,49 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <header className="topbar">
-        <NavLink to="/" className="wordmark">
-          <span className="brand-icon">B</span>
-          <span>
-            <small>{t('brand')}</small>
-            <strong>{t('title')}</strong>
-          </span>
-        </NavLink>
-        <div className="top-actions">
-          <Badge good={connected}>
-            {connected ? t('connected') : t('disconnected')}
-          </Badge>
-          <LanguageSwitcher />
-        </div>
-      </header>
-      <nav className="navigation">
-        {nav.map(([label, path]) => (
-          <NavLink key={path} to={path} end>
-            {t(label)}
+      <div className="sticky-header" ref={header}>
+        <header className="topbar">
+          <NavLink to="/" className="wordmark">
+            <span className="brand-icon">B</span>
+            <span>
+              <small>{t('brand')}</small>
+              <strong>{t('title')}</strong>
+            </span>
           </NavLink>
-        ))}
-      </nav>
-      <div className="context-strip">
-        <span>
-          <small>{t('device')}</small>
-          {device || '—'}
-        </span>
-        <span>
-          <small>{t('agent')}</small>
-          {plan
-            ? `${plan.config.agent_id || 'gemini'} · ${plan.config.target_packages.length}`
-            : selectedRun?.agent_id || '—'}
-        </span>
-        <span>
-          <small>{t('protocol')}</small>
-          {plan?.protocol_version || selectedRun?.protocol_version || '—'}
-        </span>
-        <span>
-          <small>{t('capture')}</small>
-          {busyRun ? t(busyRun.status) : '—'}
-        </span>
+          <div className="top-actions">
+            <Badge good={connected}>
+              {connected ? t('connected') : t('disconnected')}
+            </Badge>
+            <LanguageSwitcher />
+          </div>
+        </header>
+        <nav className="navigation">
+          {nav.map(([label, path]) => (
+            <NavLink key={path} to={path} end>
+              {t(label)}
+            </NavLink>
+          ))}
+        </nav>
+        <div className="context-strip">
+          <span>
+            <small>{t('device')}</small>
+            {device || '—'}
+          </span>
+          <span>
+            <small>{t('agent')}</small>
+            {plan
+              ? `${plan.config.agent_id || 'gemini'} · ${plan.config.target_packages.length}`
+              : selectedRun?.agent_id || '—'}
+          </span>
+          <span>
+            <small>{t('protocol')}</small>
+            {plan?.protocol_version || selectedRun?.protocol_version || '—'}
+          </span>
+          <span>
+            <small>{t('capture')}</small>
+            {busyRun ? t(busyRun.status) : '—'}
+          </span>
+        </div>
       </div>
       {error && (
         <div className="alert error" role="alert">

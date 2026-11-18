@@ -8,8 +8,6 @@ import android.provider.Settings;
 import android.view.*;
 import android.widget.*;
 import org.json.*;
-import java.net.*;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -172,25 +170,7 @@ public final class ExperimentMarkerService extends Service {
     }
 
     private JSONObject request(String suffix, JSONObject body) throws Exception {
-        HttpURLConnection connection = (HttpURLConnection) new URL(origin + "/api/runs/" + run + suffix).openConnection();
-        try {
-            connection.setConnectTimeout(3000); connection.setReadTimeout(3000); connection.setInstanceFollowRedirects(false);
-            connection.setRequestProperty("Authorization", "Bearer " + token);
-            if (body != null) {
-                connection.setRequestMethod("POST"); connection.setDoOutput(true);
-                connection.setRequestProperty("Content-Type", "application/json");
-                try (var output = connection.getOutputStream()) { output.write(body.toString().getBytes(StandardCharsets.UTF_8)); }
-            }
-            int code = connection.getResponseCode();
-            if (code < 200 || code >= 300) throw new java.io.IOException("HTTP " + code);
-            try (var input = connection.getInputStream()) {
-                java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
-                byte[] buffer = new byte[8192];
-                int count;
-                while ((count = input.read(buffer)) != -1) bytes.write(buffer, 0, count);
-                return new JSONObject(bytes.toString(StandardCharsets.UTF_8.name()));
-            }
-        } finally { connection.disconnect(); }
+        return MarkerApiClient.request(origin, run, token, suffix, body);
     }
 
     private void updateStatus(String message) {

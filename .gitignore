@@ -16,3 +16,7 @@ local.properties
 *.pyc
 
 .access-token
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+*.tsbuildinfo

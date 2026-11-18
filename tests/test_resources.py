@@ -119,6 +119,7 @@ class ResourceCaptureTests(unittest.TestCase):
                 run = run_fixture(mode)
                 run.update(duration_seconds=30, sample_interval_seconds=10, settle_seconds=10)
                 with patch.object(resources.time, "monotonic", side_effect=lambda: clock[0]), \
+                     patch.object(resources, "check_start", return_value={}), \
                      patch.object(resources, "Probe", Probe), patch.object(resources.collector, "Recording", Recording), \
                      patch.object(resources.collector, "package_details", return_value={"version": "1"}), \
                      patch.object(resources.collector, "adb", return_value="build") as adb:

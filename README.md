@@ -4,7 +4,13 @@ An Android controller and Windows-friendly Python backend for observing Binder r
 
 The primary local checkout is `C:\CS211ProjectB`. Clone this repository with `git clone https://github.com/mingsh1/CS211ProjectB.git`, then run setup commands from its root. Local experiment data, access codes, virtual environments and caches are intentionally excluded from Git. A prebuilt debug APK is available at [artifacts/apk/app-debug.apk](artifacts/apk/app-debug.apk); rebuild from source after Android code changes. See [PLAN.md](PLAN.md) for the original-course-requirement mapping and remaining acceptance gates, and [REPORT_TEMPLATE.md](REPORT_TEMPLATE.md) for the final report outline. Code and fixture tests do not replace real-phone acceptance or the required experimental dataset.
 
-For the current CPU, memory, battery/energy and controller-overhead extension, start with [NEXT_WEEK_PLAN.md](NEXT_WEEK_PLAN.md). APK 1.4 adds resource-file exports; start all three resource arms from the laptop browser. Restart the backend after updating source, then install the new APK with `adb -s YOUR_DEVICE install -r artifacts/apk/app-debug.apk`. The original local traces and saved access code remain in `C:\CS211_Project_B`; they are not bundled with this repository. A fresh checkout creates its own local run directory and access code.
+For the current CPU, memory, battery/energy and controller-overhead extension, start with [NEXT_WEEK_PLAN.md](NEXT_WEEK_PLAN.md). APK 1.5 includes resource-file and Simpleperf exports; start all three resource arms from the laptop browser. Restart the backend after updating source, then install the new APK with `adb -s YOUR_DEVICE install -r artifacts/apk/app-debug.apk`. The original local traces and saved access code remain in `C:\CS211_Project_B`; they are not bundled with this repository. A fresh checkout creates its own local run directory and access code.
+
+## Optional Simpleperf diagnostics
+
+See [SIMPLEPERF.md](SIMPLEPERF.md) for the OPPO Find X7 / Android 16 / Gemini procedure. Enable the optional checkbox for additional Binder trace or Resources C diagnostic runs. These runs are excluded from the formal workload matrix and standard overhead comparisons. Permission failures save evidence without stopping Binder collection. Actual Gemini profiling support still requires a phone test.
+
+After this update, restart this repository's backend and install `artifacts/apk/app-debug.apk` (1.5). Updating only the APK does not update the laptop collector or web UI.
 
 ## Code outline
 

@@ -53,6 +53,7 @@ def evaluate(samples):
 
 def report(root):
     samples, exclusions, records, comparisons = [], [], [], []
+    diagnostics = []
     groups = defaultdict(list)
     observed = defaultdict(list)
     for path in sorted(root.glob("*/metadata.json")):
@@ -60,6 +61,12 @@ def report(root):
         summary_path = path.with_name("summary.json")
         if "id" not in run or "workload" not in run:
             continue  # Offline trace analyses lack experiment ground truth.
+        if run.get("simpleperf_requested"):
+            diagnostics.append({"id": run["id"], "agent": run["target_package"],
+                                "workload": run["workload"], "capture_status": run.get("status"),
+                                "simpleperf": run.get("simpleperf")})
+            exclusions.append({"id": run["id"], "reason": "Simpleperf diagnostic; excluded from formal trials and overhead"})
+            continue
         if run.get("mode") in resources.MODES:
             continue  # Resource scenarios do not count as formal Binder workloads.
         summary = json.loads(summary_path.read_text(encoding="utf-8")) if summary_path.is_file() else None
@@ -121,6 +128,7 @@ def report(root):
                    for w in WORKLOADS) for a in agents) >= 2:
             complete_cohorts.append({"device": cohort[0], "conditions": cohort[1]})
     return {
+        "simpleperf_runs": diagnostics,
         "feature_names": FEATURES,
         "method": "Leave one agent out, nearest workload centroid, standardized on training data",
         "abstention_margin": .20, "coverage": coverage,
@@ -138,6 +146,9 @@ def overhead(records):
     """Pair baseline and traced task timings, preserving missing/ambiguous pairs."""
     pairs, excluded, buckets = [], [], defaultdict(lambda: defaultdict(list))
     for run, summary in records:
+        if run.get("simpleperf_requested"):
+            excluded.append({"id": run["id"], "issues": ["Simpleperf diagnostic"]})
+            continue
         if run.get("workload") not in {"W1", "W2"}:
             continue  # W0 is fixed by the operator, not a completion-time measurement.
         mode = run.get("mode", "trace")

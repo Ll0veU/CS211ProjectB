@@ -121,6 +121,8 @@ function workloadChanged() {
 function isResourceMode() { return $("mode").value.startsWith("resource_"); }
 function modeChanged() {
   const resource = isResourceMode();
+  $("simpleperf_enabled").disabled = !["trace", "resource_trace"].includes($("mode").value);
+  if ($("simpleperf_enabled").disabled) $("simpleperf_enabled").checked = false;
   $("resource-setup").hidden = !resource;
   $("seconds").min = resource ? 30 : 5;
   $("seconds").max = resource ? 540 : 180;
@@ -131,12 +133,19 @@ function modeChanged() {
   workloadChanged();
 }
 $("mode").onchange = modeChanged;
+$("simpleperf-probe").onclick = action(async () => {
+  $("simpleperf-capabilities").textContent = "Checking non-root profiling support…";
+  try {
+    const r = await api("devices/simpleperf-capabilities", {serial: $("device").value, package: $("package").value.trim()});
+    $("simpleperf-capabilities").textContent = (r.eligible ? "Ready to attempt: " : "Unavailable: ") + r.reason;
+  } catch (error) { $("simpleperf-capabilities").textContent = error.message; }
+});
 $("resource-probe").onclick = action(async () => {
   $("resource-capabilities").textContent = "Checking the selected phone; this may take several seconds…";
   try {
     const r = await api("devices/resource-capabilities", {serial: $("device").value, package: $("package").value.trim()});
     const flag = (v) => v ? "available" : "unavailable";
-    $("resource-capabilities").textContent = `CPU: ${flag(r.cpu_available)}; Agent PSS: ${flag(r.agent_pss_available)}; system memory: ${flag(r.system_memory_available)}; charge counter: ${flag(r.charge_counter_available)}. ${r.note}`;
+    $("resource-capabilities").textContent = `System CPU intervals: ${flag(r.cpu_available)}; Agent CPU: ${flag(r.agent_cpu_available)}; voltage: ${flag(r.voltage_available)}; unplugged/discharging: ${flag(r.unplugged_discharging)}; Agent PSS: ${flag(r.agent_pss_available)}; system memory: ${flag(r.system_memory_available)}; charge counter: ${flag(r.charge_counter_available)}. ${r.note}`;
   } catch (error) {
     $("resource-capabilities").textContent = error.message;
   }
@@ -219,6 +228,7 @@ $("setup").onsubmit = action(async () => {
     duration_seconds: Number($("seconds").value), repetition: Number($("repetition").value),
     mode: $("mode").value, device_label: $("device_label").value.trim(), conditions: $("conditions").value.trim(),
     sample_interval_seconds: Number($("sample_interval_seconds").value), settle_seconds: Number($("settle_seconds").value),
+    simpleperf_enabled: $("simpleperf_enabled").checked,
     controller_stop_ack: $("controller_stop_ack").checked
   });
   choose(run.id);
@@ -287,6 +297,12 @@ async function refresh(force = false) {
       $("browser_package").value = run.browser_package || "";
       renderedRun = "";
     }
+    $("simpleperf-status").textContent = run?.simpleperf_requested
+      ? "Simpleperf diagnostic · " + (run.simpleperf?.status || "pending") +
+        (run.simpleperf?.sample_count != null ? ` · ${run.simpleperf.sample_count} samples` : "") +
+        (run.simpleperf?.reason ? " · " + run.simpleperf.reason : "") +
+        " · Excluded from formal comparisons. See simpleperf.json and available report files."
+      : "";
     const detection = run?.browser_detection;
     $("browser-detection").textContent = detection?.status === "pending" ? "Checking the foreground browser…"
       : detection?.status === "detected" ? "Detected browser: " + detection.package + ". Confirm the webpage actually appeared; any manual entry is preserved."
@@ -406,8 +422,8 @@ function renderExports(names, id) {
 }
 function renderResources(s) {
   $("resource-results").hidden = false;
-  $("resource-window").textContent = `${s.mode}: ${s.elapsed_seconds.toFixed(1)} seconds; ${s.sample_count} samples; observer commands took ${s.observer_wall_seconds.toFixed(1)} seconds in total.`;
-  const labels = {system_cpu_reported_percent: "System CPU (%)", agent_cpu_one_core_percent: "Agent CPU (% of one core)",
+  $("resource-window").textContent = `${s.mode} / ${s.observer}: ${s.elapsed_seconds.toFixed(1)} seconds; ${s.sample_count} samples; observer commands took ${s.observer_wall_seconds.toFixed(1)} seconds in total.`;
+  const labels = {system_cpu_reported_percent: "System CPU (%; see method below)", agent_cpu_one_core_percent: "Agent CPU (% of one core)",
     controller_cpu_one_core_percent: "Controller CPU (% of one core)", agent_pss_kib: "Agent PSS (KiB)",
     controller_pss_kib: "Controller PSS (KiB)", system_used_kib: "System used memory (KiB)"};
   const rows = Object.entries(s.metrics).map(([k,v]) => [labels[k] || k, v.median, `${v.samples} samples${v.reason ? ': ' + v.reason : ''}`]);
@@ -419,7 +435,13 @@ function renderResources(s) {
     for (const value of cells) { const td = document.createElement("td"); td.textContent = value == null ? "Unavailable" : typeof value === "number" ? value.toFixed(2) : value; tr.append(td); }
     return tr;
   }));
-  $("resource-issues").textContent = [...s.issues, ...s.cpu_rejection_reasons].join(" · ");
+  const missing = Object.entries(s.metrics).filter(([,v]) => v.median == null).map(([k]) => labels[k] || k);
+  $("resource-issues").textContent = [...s.issues, ...s.cpu_rejection_reasons,
+    ...(missing.length ? ["Unavailable metrics: " + missing.join(", ")] : []),
+    ...(s.battery.reason ? [s.battery.reason] : [])].join(" · ");
+  $("resource-method").textContent = s.observer === "adb-proc-stat-v2"
+    ? "CPU: cumulative counter differences; system busy excludes idle and I/O wait. First snapshot is a baseline. Process CPU is relative to one core. Process changes/inaccessible counters remain unavailable."
+    : "Legacy CPU: accepted dumpsys windows; system TOTAL includes I/O wait. Do not pool with v2 counter measurements.";
 }
 $("evaluate").onclick = action(async () => {
   const r = await api("evaluation.json");
@@ -427,15 +449,16 @@ $("evaluate").onclick = action(async () => {
   const lines = [r.protocol_has_at_least_two_agents_with_three_repetitions ? "Workload matrix complete." : "Workload matrix incomplete.",
     "Classifier coverage: " + percent(r.classification_coverage) + "; accuracy on classified successful tasks: " + percent(r.accuracy_when_classified),
     ...r.coverage.map((g) => `${g.device} / ${g.conditions} / ${g.agent} / ${g.workload}: ${g.distinct_repetitions} valid repetitions, ${g.successful_runs} successes`),
+    "Simpleperf diagnostic runs: " + (r.simpleperf_runs || []).length,
     "Excluded classifier runs: " + r.excluded_runs.length,
     "Paired overhead trials: " + r.overhead.pairs.length,
     ...r.overhead.groups.map((g) => `${g.agent} / ${g.workload}: ${g.pair_count} pairs, median task time change ${g.median_delta_seconds.toFixed(2)}s (${g.median_relative_change_percent.toFixed(1)}%)`),
     "Overhead measures incremental tracing impact with the controller enabled; operator and network variation remain.",
     "Download evaluation JSON for per-run evidence, outcomes, uncertain predictions and exclusions."];
   if (r.resource_overhead) {
-    lines.push(`Resource comparisons: ${r.resource_overhead.triplets.length} complete triplets; ${r.resource_overhead.excluded.length} exclusions.`);
+    lines.push(`Resource comparisons: ${r.resource_overhead.triplets.length} matched triplets (not a guarantee of valid CPU/energy); ${r.resource_overhead.excluded.length} exclusions.`);
     for (const g of r.resource_overhead.groups) {
-      lines.push(`${g.device} / ${g.agent} / ${g.workload}: ${g.triplet_count} triplets (${g.three_repetitions_complete ? '3 repetitions reached' : 'more repetitions needed'})`);
+      lines.push(`${g.device} / ${g.agent} / ${g.workload} / ${g.observer || "legacy"}: ${g.triplet_count} triplets (${g.three_repetitions_complete ? '3 repetitions reached' : 'more repetitions needed'})`);
       for (const kind of ["controller", "tracing", "total"]) {
         const m = g.metrics[kind];
         const value = (k, unit) => m[k].median_delta == null ? "unavailable" : m[k].median_delta.toFixed(2) + unit + ` (n=${m[k].valid_triplets})`;

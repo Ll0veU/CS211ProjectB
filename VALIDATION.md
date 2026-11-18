@@ -1,5 +1,15 @@
 # Validation record
 
+## Simpleperf integration checked 2026-11-15
+
+- Synced collector, coordinator, resource integration, diagnostic exclusions, UI, Android exports and tests into the authoritative repository `C:\CS211ProjectB`.
+- All 42 Python tests passed from this repository. JavaScript syntax and `node tests/frontend_simpleperf.cjs` UI wiring checks passed. Tests use fixtures and mocks, not measurements from Gemini.
+- Built APK 1.5 (`versionCode 6`, package `edu.cs211.projectb`) from this repository using offline Gradle and the installed SDK/JDK. AAPT verified the actual APK metadata; apksigner verified the signature and confirmed the same certificate as the previous artifact.
+- Updated `artifacts/apk/app-debug.apk`; its SHA-256 matches the build output: `dc3b818ee38bab3b44ec2638ba607c7019236082a45a535621173c2a072b1f48`.
+- Backups are in `.backups/simpleperf-sync-20261115-215549/`. Existing run data were not migrated or changed.
+- Phone installation, backend restart and OPPO Find X7 / Android 16 / Gemini non-root sampling acceptance remain pending. Code changes are local; no Git commit or push was performed.
+
+
 ## Resource extension checked 2026-11-07
 
 - Current-source regression suite: 32 tests passed (19 existing tests and 13 new resource tests). New tests cover CPU normalization and process matching, PSS deduplication, missing readings, battery units and invalid states, stale/overlapping CPU windows, arm contamination, controller-only force-stop, tracing only in arm C, early stop, triplet/version/duplicate rules, signed deltas, resource/legacy isolation, API validation and authenticated resource exports.

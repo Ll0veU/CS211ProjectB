@@ -187,6 +187,8 @@ public final class MainActivity extends Activity {
         @JavascriptInterface public void exportFile(String path, String token) {
             if (!path.matches("runs/[0-9a-f]{32}/(metadata|summary|transactions|edges|timeline|resources|resources_summary)\\.(json|csv)")
                     && !path.matches("runs/[0-9a-f]{32}/capture\\.pftrace")
+                    && !path.matches("runs/[0-9a-f]{32}/simpleperf\\.(json|data)")
+                    && !path.matches("runs/[0-9a-f]{32}/simpleperf_(report|log)\\.txt")
                     && !path.equals("evaluation.json")) return;
             runOnUiThread(() -> {
                 exportPath = path;

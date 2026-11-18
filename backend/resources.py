@@ -11,12 +11,12 @@ import statistics
 import time
 from collections import defaultdict
 
-from . import collector
+from . import collector, proc_resources
 from .analyzer import save_json
 
 CONTROLLER = "edu.cs211.projectb"
 MODES = ("resource_agent", "resource_controller", "resource_trace")
-VERSION = "adb-dumpsys-v1"
+VERSION = "adb-proc-stat-v2"
 
 
 def belongs(name, package):
@@ -86,6 +86,8 @@ def parse_battery(text):
 class Probe:
     def __init__(self, serial, target):
         self.serial, self.target = serial, target
+        self.counters = proc_resources.Counters(self.read, target, CONTROLLER)
+        self.device = None
 
     def read(self, *args):
         try:
@@ -93,42 +95,73 @@ class Probe:
         except Exception as exc:
             return {"text": "", "error": str(exc)}
 
+    def memory(self, package, processes, raw, label):
+        if processes is None:
+            return None
+        selected = [p for p in processes if belongs(p["name"], package)]
+        if not selected:
+            return None
+        totals = []
+        for p in selected:
+            result = self.read("dumpsys", "meminfo", "-s", str(p["pid"]))
+            raw[f"{label}_{p['pid']}"] = result
+            header = re.search(r"\*\* MEMINFO in pid (\d+) \[([^\]]+)\] \*\*", result["text"])
+            value = parse_pss(result["text"])
+            if result["error"] or not header or int(header[1]) != p["pid"] or header[2] != p["name"] or value is None:
+                return None  # Never silently sum only the readable members.
+            totals.append(value)
+        return sum(totals)
+
     def sample(self, start):
         before = time.monotonic()
         raw = {}
         raw["processes"] = self.read("ps", "-A", "-o", "PID,ARGS")
         processes = parse_processes(raw["processes"]["text"])
-        raw["cpu"] = self.read("dumpsys", "cpuinfo")
+        cpu = self.counters.sample(processes, raw)
+        if self.device is None:
+            self.device = {"model": self.read("getprop", "ro.product.model"),
+                           "battery_realpath": self.read("readlink", "-f", "/sys/class/power_supply/battery")}
+        raw["device"] = self.device
         cpu_at = time.monotonic() - start
-        raw["agent_memory"] = self.read("dumpsys", "meminfo", "-s", self.target)
-        raw["controller_memory"] = self.read("dumpsys", "meminfo", "-s", CONTROLLER)
+        agent_pss = self.memory(self.target, processes, raw, "agent_memory")
+        controller_pss = self.memory(CONTROLLER, processes, raw, "controller_memory")
         raw["system_memory"] = self.read("cat", "/proc/meminfo")
         raw["battery"] = self.read("dumpsys", "battery")
+        raw["battery_sysfs"] = self.read("cat", "/sys/class/power_supply/battery/uevent")
         battery_at = time.monotonic() - start
+        battery = proc_resources.voltage(parse_battery(raw["battery"]["text"]), raw["battery_sysfs"]["text"],
+                                         self.device["model"]["text"].strip(), self.device["battery_realpath"]["text"].strip())
         controller_present = None if processes is None else any(belongs(p["name"], CONTROLLER) for p in processes)
         agent_present = None if processes is None else any(belongs(p["name"], self.target) for p in processes)
-        cpu = parse_cpu(raw["cpu"]["text"], self.target)
-        pss = parse_pss(raw["controller_memory"]["text"])
+        pss = controller_pss
         if controller_present is False:
             pss = 0  # ps independently confirms no process; not a missing-reading fallback.
-            cpu["controller_cpu_one_core_percent"] = 0
         return {"offset_seconds": before - start, "cpu_read_offset_seconds": cpu_at,
                 "battery_read_offset_seconds": battery_at, "probe_wall_seconds": time.monotonic() - before,
                 "processes": processes, "agent_present": agent_present, "controller_present": controller_present,
-                "cpu": cpu, "agent_pss_kib": parse_pss(raw["agent_memory"]["text"]),
+                "cpu": cpu, "agent_pss_kib": agent_pss,
                 "controller_pss_kib": pss, "system_used_kib": parse_memory(raw["system_memory"]["text"]),
-                "battery": parse_battery(raw["battery"]["text"]), "raw": raw}
+                "battery": battery, "raw": raw}
 
 
 def capabilities(serial, target):
-    sample = Probe(serial, target).sample(time.monotonic())
+    probe = Probe(serial, target)
+    start = time.monotonic()
+    baseline = probe.sample(start)
+    time.sleep(1.5)
+    sample = probe.sample(start)
     return {"observer": VERSION, "mutates_device": False,
             "cpu_available": sample["cpu"]["system_cpu_reported_percent"] is not None,
             "agent_pss_available": sample["agent_pss_kib"] is not None,
             "system_memory_available": sample["system_used_kib"] is not None,
             "charge_counter_available": (sample["battery"]["charge_uah"] or 0) > 0,
-            "controller_present": sample["controller_present"], "sample": sample,
-            "note": "Snapshot availability only; CPU freshness and discharge resolution are checked during each run."}
+            "controller_present": sample["controller_present"], "sample": sample, "baseline": baseline,
+            "agent_cpu_available": sample["cpu"]["agent_cpu_one_core_percent"] is not None,
+            "controller_cpu_available": sample["cpu"]["controller_cpu_one_core_percent"] is not None,
+            "voltage_available": sample["battery"]["voltage_mv"] is not None,
+            "voltage_source": sample["battery"].get("voltage_source"),
+            "unplugged_discharging": sample["battery"]["powered"] is False and sample["battery"]["status"] == 3,
+            "note": "CPU checked using two counter snapshots; battery must be unplugged before Start. Energy resolution still needs a full run."}
 
 
 def summarize(run, samples, elapsed, finished_normally):
@@ -146,7 +179,17 @@ def summarize(run, samples, elapsed, finished_normally):
         for name in ("agent_pss_kib", "controller_pss_kib", "system_used_kib"):
             if s[name] is not None:
                 values[name].append(s[name])
+        battery = s["battery"]
+        if battery["powered"] is not False or battery["status"] != 3 or battery["simulated"]:
+            issues.append("Phone was not confirmed unplugged and discharging throughout the window")
         cpu = s["cpu"]
+        if cpu.get("method") == "proc-stat-v2":
+            for name in proc_resources.METRICS:
+                if cpu[name] is not None:
+                    values[name].append(cpu[name])
+            if not cpu.get("baseline"):
+                cpu_rejections.extend(cpu.get("reasons", {}).values())
+            continue
         if cpu.get("awake_percent", 100) != 100:
             cpu_rejections.append("CPU window includes device sleep or unknown awake state")
             continue
@@ -177,15 +220,18 @@ def summarize(run, samples, elapsed, finished_normally):
                          "peak": max(data) if data else None, "samples": len(data),
                          "reason": None if len(data) >= 2 else "Need at least two available, valid samples"}
     battery = battery_summary(samples)
-    return {"observer": VERSION, "run_id": run["id"], "mode": run["mode"],
+    method = "adb-proc-stat-v2" if any(s["cpu"].get("method") == "proc-stat-v2" for s in samples) else "adb-dumpsys-v1"
+    return {"observer": method, "run_id": run["id"], "mode": run["mode"],
             "elapsed_seconds": elapsed, "requested_seconds": run["duration_seconds"],
             "sample_count": len(samples), "issues": sorted(set(issues)),
             "metrics": metrics, "battery": battery,
-            "cpu_rejected_samples": len(cpu_rejections), "cpu_rejection_reasons": sorted(set(cpu_rejections)),
+            "cpu_rejected_samples": sum(not s["cpu"].get("baseline", False) and any(s["cpu"].get("reasons", {}).values()) for s in samples) if method == VERSION else len(cpu_rejections), "cpu_rejection_reasons": sorted(set(cpu_rejections)),
             "observer_wall_seconds": sum(s["probe_wall_seconds"] for s in samples),
             "limitations": ["Same ADB/dumpsys observer is active in all arms; its cost is not subtracted",
-                            "CPU values are medians of accepted dumpsys windows, not integrated CPU time",
-                            "System CPU includes I/O wait; process CPU uses one-core normalization and can exceed 100%",
+                            "CPU values are interval medians; first v2 snapshot establishes a baseline",
+                            "v2 system CPU excludes idle and I/O wait; v1 dumpsys includes I/O wait. Never pool methods",
+                            "Process CPU uses device CLK_TCK and host read-midpoint intervals, one-core scale; wireless timing uncertainty remains",
+                            "Process set changes or inaccessible members invalidate that group interval; short-lived processes between snapshots may be missed",
                             "Package-shaped process names may miss shared or isolated workers; PSS is sampled",
                             "Battery energy is a whole-device charge-times-voltage estimate, not per-app measured energy"]}
 
@@ -197,6 +243,7 @@ def battery_summary(samples):
         result["reason"] = "Need at least two battery samples"
         return result
     batteries = [s["battery"] for s in samples]
+    result["voltage_sources"] = sorted({b.get("voltage_source", "legacy_dumpsys") for b in batteries})
     first, last = batteries[0], batteries[-1]
     seconds = samples[-1]["battery_read_offset_seconds"] - samples[0]["battery_read_offset_seconds"]
     result["window_seconds"] = seconds
@@ -223,6 +270,9 @@ def battery_summary(samples):
     if any(not b["voltage_mv"] or not 2000 <= b["voltage_mv"] <= 6000 for b in batteries):
         result["reason"] = "Voltage unavailable or outside supported single-cell range; charge only"
         return result
+    if len(result["voltage_sources"]) != 1:
+        result["reason"] = "Voltage source changed during this run; charge only"
+        return result
     # Integrate successive observed charge steps at mean endpoint voltage.
     energy = sum((a["charge_uah"] - b["charge_uah"]) * (a["voltage_mv"] + b["voltage_mv"]) / 2e6
                  for a, b in zip(batteries, batteries[1:]))
@@ -236,7 +286,7 @@ def save(folder, run, samples, elapsed, finished_normally):
     save_json(folder / "resources_summary.json", summary)
     fields = ["offset_seconds", "probe_wall_seconds", "agent_pss_kib", "controller_pss_kib", "system_used_kib",
               "system_cpu_reported_percent", "agent_cpu_one_core_percent", "controller_cpu_one_core_percent",
-              "charge_uah", "voltage_mv", "level", "status", "powered"]
+              "charge_uah", "voltage_mv", "voltage_source", "voltage_unit", "level", "status", "powered"]
     with (folder / "resources.csv").open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fields)
         writer.writeheader()
@@ -246,9 +296,24 @@ def save(folder, run, samples, elapsed, finished_normally):
     return summary
 
 
-def capture(run, folder, stop, update):
+def check_start(serial, target):
+    """Read-only guards before controller mutation and again before measurement."""
+    evidence = {"battery": collector.adb("shell", "dumpsys", "battery", serial=serial),
+                "foreground": collector.adb("shell", "dumpsys", "activity", "activities", serial=serial)}
+    battery = parse_battery(evidence["battery"])
+    if battery["powered"] is not False or battery["status"] != 3 or battery["simulated"]:
+        raise RuntimeError("Unplug USB/wireless charging and confirm discharging before resource capture")
+    match = re.search(r"(?:topResumedActivity|mResumedActivity)=[^\n]*?\bu\d+\s+([A-Za-z0-9_.]+)/", evidence["foreground"])
+    if not match or match[1] != target:
+        raise RuntimeError("Keep the selected Agent in the foreground before starting; detected " + (match[1] if match else "unknown"))
+    return evidence
+
+
+def capture(run, folder, stop, update, sidecar=None):
     """Called only after resource-mode validation; never called by legacy runs."""
     serial = run["serial"]
+    preflight = check_start(serial, run["target_package"])
+    update(resource_preflight=preflight)
     if run["mode"] == "resource_agent":
         # Explicit UI acknowledgment is required by the server; only our controller is stopped.
         collector.adb("shell", "am", "force-stop", CONTROLLER, serial=serial)
@@ -256,6 +321,7 @@ def capture(run, folder, stop, update):
            settling_until=time.time() + run["settle_seconds"])
     if stop.wait(run["settle_seconds"]):
         raise RuntimeError("Resource experiment stopped before measurement")
+    check_start(serial, run["target_package"])
     probe = Probe(serial, run["target_package"])
     fingerprint = collector.adb("shell", "getprop", "ro.build.fingerprint", serial=serial)
     version = collector.package_details(serial, run["target_package"])
@@ -265,6 +331,8 @@ def capture(run, folder, stop, update):
     recording = collector.Recording(run, folder) if run["mode"] == "resource_trace" else None
     samples, started, finished, trace = [], None, False, None
     try:
+        if sidecar:
+            sidecar.start()
         if recording:
             # Include observer startup/finalization margin without silently cutting the fixed window.
             recording.duration = run["duration_seconds"] + 45
@@ -283,6 +351,8 @@ def capture(run, folder, stop, update):
                 break
         update(status="collecting")
     finally:
+        if sidecar:
+            sidecar.request_stop()
         if started is not None:
             save(folder, run, samples, time.monotonic() - started, finished)
         if recording and recording.pid:
@@ -296,12 +366,18 @@ def compare(root):
         run = json.loads(path.read_text(encoding="utf-8"))
         if run.get("mode") not in MODES:
             continue
+        if run.get("simpleperf_requested"):
+            excluded.append({"id": run.get("id"), "issues": ["Simpleperf diagnostic; excluded from standard overhead"]})
+            continue
         summary_path = path.with_name("resources_summary.json")
         if run.get("status") != "complete" or run.get("outcome") != "success" or not summary_path.is_file():
             excluded.append({"id": run.get("id"), "issues": ["Requires completed capture and confirmed scenario success"]})
             continue
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
         issues = list(summary["issues"])
+        # Old summaries may lack this explicit protocol check; preserve files but exclude comparisons.
+        if summary.get("battery", {}).get("reason") == "Need real, unplugged, discharging readings throughout the run":
+            issues.append("Charging/unknown power state invalidates the matched resource protocol")
         identity = run.get("resource_identity")
         if not identity or not run.get("device_label") or not run.get("conditions"):
             issues.append("Missing device, conditions or version evidence")
@@ -340,12 +416,12 @@ def compare(root):
         comparisons.append({"device": key[0], "conditions": key[1], "agent": key[2], "workload": key[3],
                             "repetition": key[4], "duration_seconds": key[5],
                             "sample_interval_seconds": key[6], "settle_seconds": key[7],
-                            "identity": json.loads(key[8]),
+                            "identity": json.loads(key[8]), "observer": key[9],
                             "run_ids": {mode: arms[mode][0][0]["id"] for mode in MODES}, "differences": differences})
     groups = defaultdict(list)
     for triple in comparisons:
         cohort = json.dumps({k: triple[k] for k in ("device", "conditions", "agent", "workload", "duration_seconds",
-                                                   "sample_interval_seconds", "settle_seconds", "identity")}, sort_keys=True)
+                                                   "sample_interval_seconds", "settle_seconds", "identity", "observer")}, sort_keys=True)
         groups[cohort].append(triple)
     aggregates = []
     for cohort, triples in groups.items():

@@ -15,7 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from . import analyzer, collector, experiments, protocol, browser_detection, resources
+from . import analyzer, collector, experiments, protocol, browser_detection, resources, simpleperf
 
 WEB = Path(__file__).with_name("web")
 PACKAGE = re.compile(r"[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+")
@@ -23,7 +23,7 @@ RUN_ID = re.compile(r"[0-9a-f]{32}")
 TERMINAL = {"complete", "failed"}
 EXPORTS = {"metadata.json", "metadata.csv", "summary.json", "summary.csv", "transactions.json",
            "transactions.csv", "edges.csv", "timeline.csv", "capture.pftrace",
-           "resources.json", "resources.csv", "resources_summary.json"}
+           "resources.json", "resources.csv", "resources_summary.json"} | simpleperf.EXPORTS
 
 
 def now():
@@ -120,6 +120,9 @@ class Runs:
         repetition = body.get("repetition", 1)
         mode = body.get("mode", "trace")
         context = {key: body.get(key, "") for key in ("device_label", "conditions")}
+        requested = body.get("simpleperf_enabled", False)
+        if type(requested) is not bool or (requested and mode not in {"trace", "resource_trace"}):
+            raise APIError(400, "Simpleperf requires a boolean option and a traced diagnostic run.")
         resource_mode = mode in resources.MODES
         if mode not in ("trace", "baseline", *resources.MODES) or any(
                 not isinstance(v, str) or len(v) > 200 for v in context.values()):
@@ -159,7 +162,7 @@ class Runs:
                        workload=workload, duration_seconds=duration, repetition=repetition,
                        created_at=now(), markers=[], outcome=None, notes="", browser_package="",
                        recognized_text="", actual_response="")
-            run.update(mode=mode, **context)
+            run.update(mode=mode, simpleperf_requested=requested, **context)
             if resource_mode:
                 run.update(sample_interval_seconds=interval, settle_seconds=settling,
                            observer=resources.VERSION, controller_stop_ack=body.get("controller_stop_ack", False))
@@ -171,6 +174,7 @@ class Runs:
 
     def run(self, run_id, stop):
         stage = "preparing"
+        sidecar = None
         try:
             run = self.get(run_id)
             folder = self.folder(run_id)
@@ -180,14 +184,21 @@ class Runs:
                 raise RuntimeError("Target package is not installed for the current Android user.")
             self.update(run_id, target_uid=packages[package], packages=packages,
                         android_sdk=collector.adb("shell", "getprop", "ro.build.version.sdk", serial=serial))
+            if run.get("simpleperf_requested"):
+                sidecar = simpleperf.Recording(run, folder, lambda **changes: self.update(run_id, **changes))
             if run.get("mode") in resources.MODES:
                 stage = "resources"
-                trace = resources.capture(run, folder, stop, lambda **changes: self.update(run_id, **changes))
+                trace = resources.capture(run, folder, stop, lambda **changes: self.update(run_id, **changes),
+                                          **({"sidecar": sidecar} if sidecar else {}))
+                if sidecar:
+                    sidecar.finish()
                 self.update(run_id, status="complete", finished_at=now(),
                             trace_bytes=trace.stat().st_size if trace else None)
                 return
             recording = collector.Recording(run, folder)
             baseline = run.get("mode") == "baseline"
+            if sidecar:
+                sidecar.start()
             if not baseline:
                 recording.start()
             stage = "recording"
@@ -200,7 +211,11 @@ class Runs:
                 return
             stage = "collecting"
             self.update(run_id, status=stage)
+            if sidecar:
+                sidecar.request_stop()
             trace = recording.collect(stop.is_set())
+            if sidecar:
+                sidecar.finish()
             self.update(run_id, trace_bytes=trace.stat().st_size)
             stage = "analyzing"
             self.update(run_id, status=stage)
@@ -209,6 +224,8 @@ class Runs:
             self.update(run_id, status="complete", finished_at=now(),
                         analysis_wall_seconds=time.monotonic() - started)
         except Exception as exc:
+            if sidecar:
+                sidecar.finish()
             self.update(run_id, status="failed", failed_stage=stage, error=str(exc), finished_at=now())
         finally:
             with self.lock:
@@ -332,7 +349,8 @@ class Handler(BaseHTTPRequestHandler):
         if method == "POST" and path == "/api/runs":
             return self.respond(202, runs.start(self.body(), self.headers.get("X-ProjectB-Client", "desktop")))
         parts = path.strip("/").split("/")
-        if parts == ["api", "devices", "resource-capabilities"] and method == "POST":
+        if parts in (["api", "devices", "resource-capabilities"],
+                     ["api", "devices", "simpleperf-capabilities"]) and method == "POST":
             body = self.body()
             serial, package = body.get("serial"), body.get("package")
             if not isinstance(serial, str) or serial not in collector.devices():
@@ -342,7 +360,8 @@ class Handler(BaseHTTPRequestHandler):
             with runs.lock:
                 if any(r["status"] not in TERMINAL for r in runs.runs.values()):
                     raise APIError(409, "Run capability checks only when no experiment is active.")
-                return self.respond(200, resources.capabilities(serial, package))
+                module = simpleperf if parts[-1] == "simpleperf-capabilities" else resources
+                return self.respond(200, module.capabilities(serial, package))
         if parts == ["api", "devices", "package-details"] and method == "POST":
             body = self.body()
             serial, package = body.get("serial"), body.get("package")
@@ -378,7 +397,8 @@ class Handler(BaseHTTPRequestHandler):
             run = runs.get(run_id)
             name = action[0]
             kind = {"csv": "text/csv", "json": "application/json",
-                    "pftrace": "application/octet-stream"}[name.split(".")[-1]]
+                    "pftrace": "application/octet-stream", "data": "application/octet-stream",
+                    "txt": "text/plain; charset=utf-8"}[name.split(".")[-1]]
             file = runs.folder(run_id) / name
             if name == "metadata.csv":
                 data = run

@@ -1,6 +1,6 @@
 # Next week plan and resource overhead procedure
 
-Updated 2026-11-07. Primary project: `C:\CS211ProjectB`. This plan implements the user's decision to include CPU, memory, battery/energy and controller overhead. The course document requires overhead evaluation but does not prescribe these exact metrics or repetition counts.
+Updated 2026-11-07. This plan covers CPU, memory, battery/energy and controller overhead. Run commands from the repository root after completing the [README setup](README.md#set-up-the-laptop-and-phone). The course document requires overhead evaluation but does not prescribe these exact metrics or repetition counts.
 
 ## Where we are
 
@@ -45,7 +45,7 @@ The controller profile here is deliberately fixed to background UI without float
 8. Arm B: open the updated APK, connect, then start B from the laptop. Return to Agent during the delay. Keep the phone idle until complete. Use the same labels, repetition, interval and window.
 9. Arm C: repeat B with Perfetto enabled. A raw trace is saved, but resource runs are not passed to the ordinary Binder-workload classifier.
 10. Repeat with order A/B/C, then B/C/A, then C/A/B for repetitions 1, 2, 3. Allow comparable stabilization/cooldown between trials. Battery starting level and temperature remain in raw evidence for review.
-11. Click **Refresh comparisons and overhead**, or run `.\.venv\Scripts\python.exe -m backend.experiments` in the primary directory. Inspect `resource_overhead` in `runs/evaluation.json`.
+11. Click **Refresh comparisons and overhead**, or run `python -m backend.experiments` from the repository root. Inspect `resource_overhead` in `runs/evaluation.json`.
 
 Do not rerun a failed triplet using the same repetition number while retaining duplicate valid arms: the pairing logic intentionally rejects ambiguous duplicates. Use a new repetition number for the replacement triplet and preserve the earlier records.
 

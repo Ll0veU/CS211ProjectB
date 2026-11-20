@@ -4,9 +4,10 @@
 
 The module map and refactoring compatibility rules are in [ARCHITECTURE.md](ARCHITECTURE.md). `App.tsx` only composes the provider/layout; feature pages, polling state, chart configuration/runtime, styles and translations live in dedicated modules. The Python CLI delegates to separate HTTP and run-domain modules; the Android Activity delegates bridge, export and alert work.
 
-Use Node 24 and Python 3.10+. From the repository root:
+Configure Node 24, Python 3.10+ and your tool paths according to [README.md](README.md#set-up-the-laptop-and-phone). From the repository root:
 
 ```powershell
+. .\enter-env.ps1
 Push-Location frontend
 npm ci
 npm run build
@@ -27,8 +28,6 @@ Chord labels use ECharts' native outside labels and display only trace-local UPI
 The title bar, navigation and device-status strip stay together at the top while scrolling. Their measured height offsets the sticky sidebars and scrolling targets on responsive layouts. Timeline legends have dedicated top spacing; the count-axis title is placed at the left of the plotting area.
 
 Chart options remain stable during unrelated page-clock and polling renders, so a stationary pointer keeps its tooltip. Changing actual chart data, the selected window, language or viewport may update the chart.
-
-On this workstation, `. D:\home\CS211\enter-env.ps1` selects the existing Python/ADB/Perfetto environment. Do not assume a checkout-local `.venv` already exists. The existing environment was created without pip; use its installed dependencies or create an independent environment when necessary.
 
 ## Update the Android controller
 

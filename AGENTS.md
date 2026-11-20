@@ -13,16 +13,16 @@
 
 ## Build, Test, and Development Commands
 
-Run PowerShell commands from the repository root. Prerequisites: Python 3.10+, JDK 17, Android SDK platform 35, and ADB on `PATH`.
+Run PowerShell commands from the repository root. Follow [README.md](README.md#set-up-the-laptop-and-phone) to configure local tool paths before running the script.
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+. .\enter-env.ps1
 python -m pip install -r requirements.txt
 python -m backend.server
 ```
 
-These commands create/activate the environment, install dependencies, and serve `http://127.0.0.1:8765`. Add `--host 0.0.0.0` for trusted-LAN phone access.
+These commands select the checkout's Python, install dependencies, and serve `http://127.0.0.1:8765`. Add `--host 0.0.0.0` for trusted-LAN phone access.
 
 - `.\android\gradlew.bat -p android :app:assembleDebug`: build `android/app/build/outputs/apk/debug/app-debug.apk`.
 - `python -m unittest discover -s tests -v`: run regression tests.

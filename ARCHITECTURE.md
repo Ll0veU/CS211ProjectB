@@ -79,8 +79,10 @@ New run identities hash every top-level backend Python module, including extract
 
 ## Validation
 
+Configure your tools as described in [README.md](README.md#set-up-the-laptop-and-phone), then run from the repository root:
+
 ```powershell
-. D:\home\CS211\enter-env.ps1
+. .\enter-env.ps1
 python -m unittest discover -s tests -v
 Push-Location frontend
 npm test

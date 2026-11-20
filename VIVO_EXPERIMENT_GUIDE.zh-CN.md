@@ -10,6 +10,7 @@
 
 ## 目录
 
+- [软件架构与实验工作流](#软件架构与实验工作流)
 1. [本次需要完成什么](#1-本次需要完成什么)
 2. [开始前的软件检查](#2-开始前的软件检查)
 3. [连接电脑与手机](#3-连接电脑与手机)
@@ -26,6 +27,112 @@
 14. [保存、失败和重试](#14-保存失败和重试)
 15. [导出数据和报告](#15-导出数据和报告)
 16. [最终分析与完成标准](#16-最终分析与完成标准)
+
+## 软件架构与实验工作流
+
+### 软件架构图
+
+电脑浏览器和 Android APK 内的 WebView 都能加载同一套 React + TypeScript 工作台。Python 在电脑上提供页面、API、采集和分析；这套 React 界面也属于手机用户看到的客户端。APK 另有原生连接入口、WebView 桥接、通知和悬浮标记。下图展示本手册采用的分工：电脑管理计划、启动试次、审核并导出，手机运行 Agent 并记录现场事件。
+
+```mermaid
+flowchart TB
+    subgraph Clients[客户端界面]
+        Desktop["电脑浏览器：建计划、启动试次<br/>审核观察、比较、下载"]
+        WebView["手机 Project B APK：原生连接页<br/>WebView 内显示实验工作台"]
+    end
+
+    subgraph Phone[vivo 手机：原生功能与被测环境]
+        Bridge["ControllerBridge<br/>从可见 Activity 启用原生标记"]
+        Marker["ExperimentMarkerService<br/>通知或悬浮按钮、设备时钟、待传事件"]
+        Workload["独立的被测 Agent 与浏览器<br/>操作员在这里执行任务"]
+        Perfetto["设备端 Perfetto<br/>记录 Binder 活动"]
+        Counters["设备计数器和进程信息<br/>CPU、PSS、电池、温度"]
+    end
+
+    subgraph Laptop[电脑：同源静态页面、Python API 与数据处理]
+        API["Python HTTP 服务<br/>提供共享 React 页面和认证 API"]
+        Plan["计划与运行协调<br/>协议快照、试次队列、版本身份、人工真值"]
+        Trace["collector：Perfetto 采集<br/>启动、停止、取回原始 trace"]
+        Analyze["analyzer：Binder 分析<br/>包组归属、请求、标记对齐与区间指标"]
+        Resource["A/B/C 固定窗口采样<br/>resource_capture、resource_proc：快照和摘要"]
+        Review["证据质量与汇总<br/>run_quality、resource_compare、experiments"]
+        Files[("本地 runs 目录<br/>计划、元数据、原始 trace、资源数据、摘要")]
+        Export["study_export<br/>证据 ZIP、校验清单、中英文报告"]
+    end
+
+    Desktop <-->|HTTP：加载页面、启停、审核、查询| API
+    WebView <-->|HTTP：加载页面、查询状态| API
+    WebView -->|JavaScript 桥接| Bridge --> Marker
+    Marker -->|HTTP：就绪、事件 ID 和设备时间| API
+    API --> Plan
+    Plan -->|W0、W1、W2| Trace
+    Plan -->|资源 A、B、C| Resource
+    Workload -->|产生设备活动| Perfetto
+    Trace <-->|无线 ADB：启停、取回 trace| Perfetto
+    Resource -->|仅 C 臂启停并取回 trace| Trace
+    Resource <-->|无线 ADB：读取快照| Counters
+    Trace -->|任务 trace| Analyze
+    Plan -->|观察包组与设备时钟标记| Analyze
+    Plan --> Files
+    Trace --> Files
+    Analyze --> Files
+    Resource --> Files
+    Files --> Review
+    Files --> Export
+```
+
+界面和原生标记通过 HTTP 访问同一个电脑后端；无线 ADB 则由电脑发起，用于设备查询和采集。资源 C 启用 Perfetto 并保存 trace，但流程不自动生成 W0/W1/W2 的任务区间分析；该 trace 需要按资源实验的要求独立复核。图中的采集箭头表示数据来源，不代表 Agent 对每条 Binder 请求的因果归属。源码入口与模块清单见 [ARCHITECTURE.md](ARCHITECTURE.md)。
+
+### 实验工作流图
+
+这张图按**一个计划**展开。Gemini 完整计划先跑 6 次预试，冻结后排入 9 次任务和 9 次资源正式试次。第二个独立 Agent 在验证可比性后另建仅任务计划：3 次预试、9 次正式任务。两套计划的任务结果在共同条件下比较，预试单独保留。
+
+```mermaid
+flowchart TB
+    Setup["电脑启动后端并确认无线 ADB<br/>手机连接同一后端，核对设备和控制器版本"]
+    Plan["选择匹配当前版本的计划<br/>新建时填写 Agent、观察包、固定条件与实验范围"]
+    Existing{"已冻结且版本、条件匹配？"}
+    Pilot["按草案队列运行预试<br/>完整计划：W0、W1、W2、A、B、C<br/>仅任务计划：W0、W1、W2"]
+    Formal["按冻结队列执行正式试次<br/>任务和资源按规定顺序轮换"]
+    Ready["核对计划、run ID、手机设置和休息间隔<br/>资源试次另查放电、温度及控制器状态"]
+    Mode{"本次是什么试次？"}
+    Task["电脑启动，手机在 APK 内启用标记<br/>看到正在录制后切回 Agent"]
+    TaskEvents["W0：空闲 30 秒，计时器记结束<br/>W1：提交后等网页，最多 60 秒<br/>W2：记录语音起止，结束后最多等 60 秒"]
+    Resource["电脑启动：A 停止控制器；B/C 控制器在后台<br/>三臂均不启用任务标记；仅 C 启用 Perfetto"]
+    Sampling["准备 30 秒后按计划窗口采样<br/>初始 300 秒，每 15 秒一次；等待保存完成"]
+    Save["保存实际结果、偏离与异常并读回确认<br/>检查标记、trace 或资源摘要及质量说明"]
+    Decision{"采集或操作需要补救？"}
+    Retry["保留原尝试并说明理由<br/>任务重试单次；资源重试整轮 A/B/C"]
+    Revision["固定条件或版本变化：创建修订计划<br/>保留原计划与数据，重新做预试"]
+    Next{"当前阶段还有待跑位置？"}
+    Continue["回到试次准备<br/>按队列执行下一位置"]
+    Gate{"预试通过并完成审核？"}
+    Inspect["如实保留失败或超时<br/>按原因评估重试、修订或更换 Agent"]
+    Freeze["确认包组、版本、证据和能量限制后冻结<br/>回到试次准备，执行生成的正式队列"]
+    Export["导出计划、试次记录、原始证据与报告<br/>复核校验清单、有效数量和排除原因"]
+
+    Setup --> Plan --> Existing
+    Existing -->|是| Formal
+    Existing -->|草案| Pilot
+    Existing -->|版本或条件不符| Revision
+    Revision --> Pilot
+    Pilot --> Ready
+    Formal --> Ready
+    Ready --> Mode
+    Mode -->|任务 W0/W1/W2| Task --> TaskEvents --> Save
+    Mode -->|资源 A/B/C| Resource --> Sampling --> Save
+    Save --> Decision
+    Decision -->|采集或操作失误| Retry --> Continue
+    Decision -->|版本或固定条件变更| NewPilot["创建修订计划，保留旧记录<br/>按新计划重新预试"]
+    Decision -->|无；保留真实任务失败或超时| Next
+    Next -->|是| Continue
+    Next -->|预试跑完| Gate
+    Gate -->|是| Freeze
+    Gate -->|否| Inspect
+    Next -->|正式跑完| Export
+```
+
+当前冻结门槛要求有效预试成功且通过协议检查；正式任务即使失败或超时，也应照实保存，任务结果与证据质量分别审核。若 300 秒无法分辨放电变化，按[第 10.4 节](#104-能量不可分辨怎么办)评估是否修订为 540 秒；能量仍缺失时记录原因，不能填成零，也不必因此丢弃可用的 CPU/PSS。详见[第 11 节](#11-审核预试并冻结协议)、[第 14 节](#14-保存失败和重试)及[第 15 节](#15-导出数据和报告)。
 
 ## 1. 本次需要完成什么
 
@@ -56,11 +163,10 @@
 
 打开 [电脑工作台](http://127.0.0.1:8766)，选择“简体中文”。本批使用 **8766**，不要进入另一个数据目录的 8765 服务。
 
-如果服务已运行，直接使用，不要启动第二个实例。若已停止，在 PowerShell 执行：
+如果服务已运行，直接使用，不要启动第二个实例。若已停止，先按 [README](README.md#set-up-the-laptop-and-phone) 配置本机工具并构建前端，再从仓库根目录执行：
 
 ```powershell
-. D:\home\CS211\enter-env.ps1
-Set-Location D:\home\CS211\CS211ProjectB
+. .\enter-env.ps1
 python -m backend.server --host 0.0.0.0 --port 8766 --runs runs/vivo-study-20261118
 ```
 
@@ -74,18 +180,20 @@ python -m backend.server --host 0.0.0.0 --port 8766 --runs runs/vivo-study-20261
 adb devices -l
 ```
 
-你的手机必须显示为 `device`。此前调试地址是 `192.168.59.3:43825`，重新开启无线调试后可能改变；以手机当前页面为准。
+你的手机必须显示为 `device`。重新开启无线调试后，地址和端口可能改变；以手机当前页面为准。
 
 ```powershell
-adb connect <无线调试主页面显示的IP:端口>
+$debugEndpoint = Read-Host '无线调试主页面显示的 IP:端口'
+adb connect $debugEndpoint
+adb devices -l
 ```
 
-仅在失去配对时，另用配对弹窗地址执行 `adb pair <IP:配对端口>`，交互输入当时配对码，再连接主页面的调试端口。两种端口用途不同。
+首次连接或失去配对时，先执行 `$pairEndpoint = Read-Host '配对弹窗显示的 IP:配对端口'`，再执行 `adb pair $pairEndpoint`，按提示输入配对码。配对成功后再连接主页面的调试端口。
 
 ### 3.3 手机控制器
 
 1. 打开已更新的 **Project B APK**；版本应为 `2.0.1`，版本码 `7`。
-2. 输入已经能访问的 Tailscale 地址，例如 [手机工作台](http://100.64.0.1:8766)，点击原生入口按钮 `Open laptop backend`。地址变化时使用实际电脑 Tailscale IP。
+2. 输入 `http://<电脑可达地址>:8766`，将 `<电脑可达地址>` 换成手机能访问的电脑地址。本批使用 Tailscale 时，填电脑的 Tailscale IP。点击原生入口按钮 `Open laptop backend`。
 3. 网页内输入与电脑相同的访问码，点击“连接并刷新”，选择同一部 vivo 的 ADB 设备。
 4. 允许通知；在“连接与设备”中点击“启用悬浮标记”，到 vivo 设置允许显示在其他应用上层。返回控制器检查。
 5. 电脑和手机分别选择相同计划。两端的页面选择不一定自动同步；以计划名称、当前 run ID 和当前试次为准。
@@ -420,7 +528,7 @@ PalmClaw 当前只是候选。先在正式计数以外确认：能登录/配置�
 | `source/` | 导出器白名单内的协议与关键分析代码快照，不等于完整源码仓库 |
 | `diagnostics/` | 能力检查等诊断数据，与正式重复分开 |
 
-本批原始目录为 `D:\home\CS211\CS211ProjectB\runs\vivo-study-20261118`。旧 `runs` 中其他历史录制保留，不搬入本批冒充正式重复。独立重分析目录也应单独备份；当前 ZIP 白名单不保证包含所有 `.analyses` 内容。
+本批原始数据目录为仓库内的 `runs/vivo-study-20261118/`。旧 `runs` 中其他历史录制保留，不搬入本批冒充正式重复。独立重分析目录也应单独备份；当前 ZIP 白名单不保证包含所有 `.analyses` 内容。
 
 下载后打开 ZIP，抽查一个成功任务、一个失败/超时（如有）和一个资源 C：元数据、原始数据和报告 run ID 应能互相对应。检查导出的文本没有访问码、配对码或密钥。导出不会替代保存整个源码仓库和必要的独立分析产物。
 
@@ -453,7 +561,7 @@ PalmClaw 当前只是候选。先在正式计数以外确认：能登录/配置�
 
 ## 对照依据
 
-- 课程要求整理：`G:\我的云端硬盘\通过 Chrome 保存\CS211\Project B 中文需求整理.md`。
+- 课程要求：[Project B 课程幻灯片](https://docs.google.com/presentation/d/1Onkrvm2sZm2ES_EL_LrD5_59FDK7dbzedUjzldK2f_E/edit)及[中文要求核对](REQUIREMENTS_AUDIT.zh-CN.md)。
 - 版本化协议：`backend/experiment_protocol.json`；每个计划保存的快照才是该计划的执行依据。
 - UI 字段与提示：`frontend/src/features/`、`frontend/src/locales/catalog.ts`；入口为 `frontend/src/App.tsx`。
 - 冻结/重试/分组：`backend/campaigns.py`；任务校验：`backend/protocol.py`。

@@ -6,9 +6,9 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for frontend feature modules, Python HTTP
 
 An Android controller and Windows-friendly Python backend for observing Binder requests involving a selected Agent on an unrooted phone. The Agent itself is a separate app. The laptop records with ADB and Perfetto, then serves results to the controller over the lab network.
 
-The primary local checkout is `C:\CS211ProjectB`. Clone this repository with `git clone https://github.com/mingsh1/CS211ProjectB.git`, then run setup commands from its root. Local experiment data, access codes, virtual environments and caches are intentionally excluded from Git. A prebuilt debug APK is available at [artifacts/apk/app-debug.apk](artifacts/apk/app-debug.apk); rebuild from source after Android code changes. See [PLAN.md](PLAN.md) for the original-course-requirement mapping and remaining acceptance gates, and [REPORT_TEMPLATE.md](REPORT_TEMPLATE.md) for the final report outline. Code and fixture tests do not replace real-phone acceptance or the required experimental dataset.
+Clone this repository with `git clone https://github.com/mingsh1/CS211ProjectB.git`, then run setup commands from the checkout root. Local experiment data, access codes, virtual environments and caches are intentionally excluded from Git. A prebuilt debug APK is available at [artifacts/apk/app-debug.apk](artifacts/apk/app-debug.apk); rebuild from source after Android code changes. See [PLAN.md](PLAN.md) for the original-course-requirement mapping and remaining acceptance gates, and [REPORT_TEMPLATE.md](REPORT_TEMPLATE.md) for the final report outline. Code and fixture tests do not replace real-phone acceptance or the required experimental dataset.
 
-For the current CPU, memory, battery/energy and controller-overhead extension, start with [NEXT_WEEK_PLAN.md](NEXT_WEEK_PLAN.md). APK 1.4 adds resource-file exports; start all three resource arms from the laptop browser. Restart the backend after updating source, then install the new APK with `adb -s YOUR_DEVICE install -r artifacts/apk/app-debug.apk`. The original local traces and saved access code remain in `C:\CS211_Project_B`; they are not bundled with this repository. A fresh checkout creates its own local run directory and access code.
+For the current CPU, memory, battery/energy and controller-overhead extension, start with [NEXT_WEEK_PLAN.md](NEXT_WEEK_PLAN.md). APK 1.4 adds resource-file exports; start all three resource arms from the laptop browser. Restart the backend after updating source, then install the new APK with `adb -s YOUR_DEVICE install -r artifacts/apk/app-debug.apk`. A fresh checkout creates its own local run directory and access code unless you point it at existing data with `--runs`.
 
 ## Code outline
 
@@ -26,18 +26,43 @@ For the current CPU, memory, battery/energy and controller-overhead extension, s
 
 ## Set up the laptop and phone
 
-Use Python 3.10 or newer, Android Platform Tools on PATH, and an Android 11 or newer phone. Enable Developer options and Wireless debugging, and put the phone and laptop on the same trusted Wi-Fi network. The first analysis may download a Trace Processor binary.
+Use Python 3.10+, Android SDK Platform-Tools, and an Android 11+ phone. Use Node 24 to build the React workbench. To build the APK, install JDK 17 and Android SDK Platform 35 as well. Enable Developer options and Wireless debugging, and put the phone and laptop on the same trusted Wi-Fi network.
+
+From the repository root in PowerShell, set your tool paths for this session. Run only the assignments you need; skip them if the variables are already configured. Enter the installation directories themselves, with no surrounding quotes at the prompts.
+
+```powershell
+# SDK root (contains platform-tools); skip for a prebuilt APK if adb is already on PATH.
+$env:ANDROID_HOME = Read-Host 'Android SDK directory'
+# Only needed if building the APK and the JDK is not already configured.
+$env:JAVA_HOME = Read-Host 'JDK 17 directory'
+```
+
+`ANDROID_SDK_ROOT` is accepted as a fallback if `ANDROID_HOME` is unset. Set `PERFETTO_BINARY` only to use your own Trace Processor executable (for example, `$env:PERFETTO_BINARY = Read-Host 'Trace Processor executable path'`). Otherwise the Perfetto Python SDK resolves it and may download it on first analysis.
+
+Create the virtual environment once, then run `. .\enter-env.ps1` in each new PowerShell session before using the project. The script adds the existing checkout-local Python, configured ADB and configured JDK to this session's `PATH`. It does not install tools or change machine settings.
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-adb pair PHONE_IP:PAIRING_PORT
-adb connect PHONE_IP:DEBUG_PORT
-adb devices -l
-.\.venv\Scripts\python.exe -m backend.server --host 0.0.0.0
+. .\enter-env.ps1
+python -m pip install -r requirements.txt
+Push-Location frontend
+npm ci
+npm run build
+Pop-Location
 ```
 
-Use the pairing port displayed on the pairing-code dialog and the debugging port on the Wireless debugging screen. In the APK, enter the laptop's LAN address such as `http://192.168.1.10:8765`, then enter the access token printed by the backend. The API uses cleartext HTTP on the lab network by default. Keep it on a trusted LAN and restrict firewall access to that network. For a laptop-only session, omit `--host 0.0.0.0` and open `http://127.0.0.1:8765`.
+Pair on the first connection and whenever the phone forgets this computer. Enter the pairing code when ADB prompts for it.
+
+```powershell
+$pairEndpoint = Read-Host 'Phone IP:pairing port (pairing dialog)'
+adb pair $pairEndpoint
+$debugEndpoint = Read-Host 'Phone IP:debugging port (Wireless debugging screen)'
+adb connect $debugEndpoint
+adb devices -l
+python -m backend.server --host 0.0.0.0
+```
+
+In the APK, enter `http://<LAPTOP_ADDRESS>:8765`, replacing `<LAPTOP_ADDRESS>` with your laptop's reachable LAN address, then enter the access token printed by the backend. The API uses cleartext HTTP on the lab network by default. Keep it on a trusted LAN and restrict firewall access to that network. For a laptop-only session, omit `--host 0.0.0.0` and open `http://127.0.0.1:8765`.
 
 Install the included debug build from `artifacts/apk/app-debug.apk`, or build it with JDK 17 and Android SDK platform 35.
 
@@ -45,7 +70,7 @@ Install the included debug build from `artifacts/apk/app-debug.apk`, or build it
 Push-Location android
 .\gradlew.bat :app:assembleDebug
 Pop-Location
-adb -s PHONE_IP:DEBUG_PORT install -r android/app/build/outputs/apk/debug/app-debug.apk
+adb -s $debugEndpoint install -r android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
 Open the controller on the same phone selected in the ADB menu. Grant notification permission if you want to mark events while the Agent is in the foreground. Wait for Recording and the notification before beginning the task. The controller timestamps native markers on the phone using elapsed realtime. The desktop browser falls back to a device uptime sample and includes the sampling round trip and clock resolution. Confirm the marker order and whether each marker falls inside the trace.

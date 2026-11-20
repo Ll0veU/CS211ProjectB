@@ -1,11 +1,11 @@
 # Project B requirements and acceptance plan
 
-Updated 2026-11-07. The authoritative checkout is `C:\CS211ProjectB`, as selected by the user. See [NEXT_WEEK_PLAN.md](NEXT_WEEK_PLAN.md) for the current CPU, memory, battery and controller-overhead milestones and detailed operating procedure. The original requirement mapping below remains the course acceptance checklist.
+Updated 2026-11-07. See [NEXT_WEEK_PLAN.md](NEXT_WEEK_PLAN.md) for the current CPU, memory, battery and controller-overhead milestones and detailed operating procedure. The original requirement mapping below remains the course acceptance checklist.
 
 ## Sources and scope
 
-- `C:\Users\xumin\Downloads\Project B_ Mobile Agent Communication Architecture Analyzer.pptx`: slides 2–7 define implementation, workloads and metrics; slides 8–13 define the course roadmap; slide 14 defines mentor communication.
-- `C:\Users\xumin\Downloads\CS 211 Course Projects, Fall 2026.docx`: Project B and Shared Workload Guidance for Projects A-B. Requirements of the other projects do not apply to this project.
+- [Project B: Mobile Agent Communication Architecture Analyzer](https://docs.google.com/presentation/d/1Onkrvm2sZm2ES_EL_LrD5_59FDK7dbzedUjzldK2f_E/edit): slides 2–7 define implementation, workloads and metrics; slides 8–13 define the course roadmap; slide 14 defines mentor communication.
+- Course handout *CS 211 Course Projects, Fall 2026*: see Project B and Shared Workload Guidance for Projects A–B. Requirements of the other projects do not apply to this project.
 
 The APK controls a laptop service over Wi-Fi. The laptop uses wireless ADB and Perfetto on a stock phone. Do not root the phone, modify the target Agent, or inspect message contents. Binder observations do not cover socket traffic, shared-memory contents or cloud requests. Unknown identities, interfaces and latency remain unavailable rather than guessed.
 
